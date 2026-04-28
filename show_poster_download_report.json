@@ -1,0 +1,75 @@
+{
+  "downloaded": [
+    {
+      "title": "Daredevil",
+      "file": "daredevil.jpg",
+      "cached": false
+    },
+    {
+      "title": "Hawkeye",
+      "file": "hawkeye.jpg",
+      "cached": false
+    },
+    {
+      "title": "Iron Fist",
+      "file": "iron-fist.jpg",
+      "cached": false
+    },
+    {
+      "title": "Jessica Jones",
+      "file": "jessica-jones.jpg",
+      "cached": false
+    },
+    {
+      "title": "Loki",
+      "file": "loki.jpg",
+      "cached": false
+    },
+    {
+      "title": "Luke Cage",
+      "file": "luke-cage.jpg",
+      "cached": false
+    },
+    {
+      "title": "Moon Knight",
+      "file": "moon-knight.jpg",
+      "cached": false
+    },
+    {
+      "title": "Ms. Marvel",
+      "file": "ms-marvel.jpg",
+      "cached": false
+    },
+    {
+      "title": "Punisher",
+      "file": "punisher.jpg",
+      "cached": false
+    },
+    {
+      "title": "Secret Invasion",
+      "file": "secret-invasion.jpg",
+      "cached": false
+    },
+    {
+      "title": "She-Hulk",
+      "file": "she-hulk.jpg",
+      "cached": false
+    },
+    {
+      "title": "The Defenders",
+      "file": "the-defenders.jpg",
+      "cached": false
+    },
+    {
+      "title": "WandaVision",
+      "file": "wandavision.jpg",
+      "cached": false
+    },
+    {
+      "title": "What If\u2026?",
+      "file": "what-if.jpg",
+      "cached": false
+    }
+  ],
+  "failed": []
+}

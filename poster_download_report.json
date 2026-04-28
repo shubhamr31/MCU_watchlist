@@ -1,0 +1,175 @@
+{
+  "downloaded": [
+    {
+      "title": "Ant-Man and the Wasp",
+      "file": "ant-man-and-the-wasp.jpg",
+      "cached": false
+    },
+    {
+      "title": "Ant-Man and the Wasp: Quantumania",
+      "file": "ant-man-and-the-wasp-quantumania.jpg",
+      "cached": false
+    },
+    {
+      "title": "Avengers",
+      "file": "avengers.jpg",
+      "cached": false
+    },
+    {
+      "title": "Avengers: Age of Ultron",
+      "file": "avengers-age-of-ultron.jpg",
+      "cached": false
+    },
+    {
+      "title": "Avengers: Endgame",
+      "file": "avengers-endgame.jpg",
+      "cached": false
+    },
+    {
+      "title": "Avengers: Infinity War",
+      "file": "avengers-infinity-war.jpg",
+      "cached": false
+    },
+    {
+      "title": "Black Panther",
+      "file": "black-panther.jpg",
+      "cached": false
+    },
+    {
+      "title": "Black Panther: Wakanda Forever",
+      "file": "black-panther-wakanda-forever.jpg",
+      "cached": false
+    },
+    {
+      "title": "Captain America: Brave New World",
+      "file": "captain-america-brave-new-world.jpg",
+      "cached": false
+    },
+    {
+      "title": "Captain America: Civil War",
+      "file": "captain-america-civil-war.jpg",
+      "cached": false
+    },
+    {
+      "title": "Captain America: The First Avenger",
+      "file": "captain-america-the-first-avenger.jpg",
+      "cached": false
+    },
+    {
+      "title": "Captain America: The Winter Soldier",
+      "file": "captain-america-the-winter-soldier.jpg",
+      "cached": false
+    },
+    {
+      "title": "Deadpool & Wolverine",
+      "file": "deadpool-wolverine.jpg",
+      "cached": false
+    },
+    {
+      "title": "Doctor Strange",
+      "file": "doctor-strange.jpg",
+      "cached": false
+    },
+    {
+      "title": "Doctor Strange in the Multiverse of Madness",
+      "file": "doctor-strange-in-the-multiverse-of-madness.jpg",
+      "cached": false
+    },
+    {
+      "title": "Eternals",
+      "file": "eternals.jpg",
+      "cached": false
+    },
+    {
+      "title": "Fantastic Four: First Steps",
+      "file": "fantastic-four-first-steps.jpg",
+      "cached": false
+    },
+    {
+      "title": "Guardians of the Galaxy",
+      "file": "guardians-of-the-galaxy.jpg",
+      "cached": false
+    },
+    {
+      "title": "Guardians of the Galaxy Vol. 2",
+      "file": "guardians-of-the-galaxy-vol-2.jpg",
+      "cached": false
+    },
+    {
+      "title": "Guardians of the Galaxy Vol. 3",
+      "file": "guardians-of-the-galaxy-vol-3.jpg",
+      "cached": false
+    },
+    {
+      "title": "Iron Man",
+      "file": "iron-man.jpg",
+      "cached": false
+    },
+    {
+      "title": "Iron Man 2",
+      "file": "iron-man-2.jpg",
+      "cached": false
+    },
+    {
+      "title": "Iron Man 3",
+      "file": "iron-man-3.jpg",
+      "cached": false
+    },
+    {
+      "title": "Avengers: Infinity War",
+      "file": "avengers-infinity-war.jpg",
+      "cached": true
+    },
+    {
+      "title": "Shang-Chi and the Legend of the Ten Rings",
+      "file": "shang-chi-and-the-legend-of-the-ten-rings.jpg",
+      "cached": false
+    },
+    {
+      "title": "Spider-Man: Far From Home",
+      "file": "spider-man-far-from-home.jpg",
+      "cached": false
+    },
+    {
+      "title": "Spider-Man: Homecoming",
+      "file": "spider-man-homecoming.jpg",
+      "cached": false
+    },
+    {
+      "title": "Spider-Man: No Way Home",
+      "file": "spider-man-no-way-home.jpg",
+      "cached": false
+    },
+    {
+      "title": "The Marvels",
+      "file": "the-marvels.jpg",
+      "cached": false
+    },
+    {
+      "title": "Thor",
+      "file": "thor.jpg",
+      "cached": false
+    },
+    {
+      "title": "Thor: Love and Thunder",
+      "file": "thor-love-and-thunder.jpg",
+      "cached": false
+    },
+    {
+      "title": "Thor: Ragnarok",
+      "file": "thor-ragnarok.jpg",
+      "cached": false
+    },
+    {
+      "title": "Thor: The Dark World",
+      "file": "thor-the-dark-world.jpg",
+      "cached": false
+    },
+    {
+      "title": "Thunderbolts*",
+      "file": "thunderbolts.jpg",
+      "cached": false
+    }
+  ],
+  "failed": []
+}

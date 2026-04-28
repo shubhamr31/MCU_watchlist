@@ -1,0 +1,15 @@
+{
+  "name": "mcu-watchlist-v1",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "echo Use frontend and backend dev scripts after installing Node.js",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:backend": "npm --workspace backend run dev",
+    "build": "npm --workspace frontend run build"
+  }
+}
