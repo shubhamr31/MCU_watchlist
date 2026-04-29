@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildScheduleSeed } from "./data/normalizeSchedule";
-import { loadProgress, nextStatus, saveProgress } from "./utils/progressStore";
+import { nextStatus, saveProgress } from "./utils/progressStore";
 import { QUIZ_BANKS } from "./data/quizQuestions";
 
 const FILTERS = [
@@ -182,6 +182,8 @@ const QUIZ_MODES = [
 ];
 const QUIZ_WIDGET_STORAGE_KEY = "mcu_quiz_widget_position";
 const QUIZ_WIDGET_SIZE = 58;
+const AUTH_TOKEN_STORAGE_KEY = "mcu_watchlist_auth_token_v1";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 const seed = buildScheduleSeed();
 
@@ -201,7 +203,17 @@ export function App() {
   const [customEndDate, setCustomEndDate] = useState("");
   const [expandedArcs, setExpandedArcs] = useState({});
   const [expandedWeeks, setExpandedWeeks] = useState({});
-  const [progress, setProgress] = useState(() => loadProgress());
+  const [progress, setProgress] = useState({});
+  const [authToken, setAuthToken] = useState(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || ""
+  );
+  const [authChecking, setAuthChecking] = useState(() =>
+    typeof window === "undefined" ? false : Boolean(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY))
+  );
+  const [currentUser, setCurrentUser] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [googleReady, setGoogleReady] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [posterMap, setPosterMap] = useState({});
   const [quizOpen, setQuizOpen] = useState(false);
   const [isDraggingWidget, setIsDraggingWidget] = useState(false);
@@ -248,12 +260,134 @@ export function App() {
   const [quizSelected, setQuizSelected] = useState("");
   const [quizResult, setQuizResult] = useState("");
 
+  const authHeaders = useMemo(
+    () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    [authToken]
+  );
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setShowIntroLoader(false);
     }, 1800);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!authToken) {
+      setCurrentUser("");
+      setProgress({});
+      setAuthChecking(false);
+      return;
+    }
+    const hydrateUser = async () => {
+      setAuthChecking(true);
+      try {
+        const profileResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: authHeaders,
+        });
+        if (!profileResponse.ok) {
+          throw new Error("Session expired");
+        }
+        const profile = await profileResponse.json();
+        setCurrentUser(profile.username || "");
+
+        const progressResponse = await fetch(`${API_BASE_URL}/api/progress/me`, {
+          headers: authHeaders,
+        });
+        if (!progressResponse.ok) {
+          throw new Error("Unable to load progress");
+        }
+        const payload = await progressResponse.json();
+        setProgress(payload.progress || {});
+      } catch (_error) {
+        setAuthToken("");
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        }
+      } finally {
+        setAuthChecking(false);
+      }
+    };
+    hydrateUser();
+  }, [authHeaders, authToken]);
+
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/leaderboard`);
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        setLeaderboard(payload.leaderboard || []);
+      } catch (_error) {
+        // Ignore transient leaderboard failures.
+      }
+    };
+    fetchLeaderboard();
+    const timer = window.setInterval(fetchLeaderboard, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (currentUser || typeof window === "undefined") {
+      return undefined;
+    }
+    if (!GOOGLE_CLIENT_ID) {
+      setAuthError("Google Sign-In is not configured. Add VITE_GOOGLE_CLIENT_ID.");
+      return undefined;
+    }
+
+    const existingScript = document.querySelector('script[data-google-identity="true"]');
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id) {
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          const idToken = response.credential;
+          if (!idToken) {
+            setAuthError("Google Sign-In failed. Try again.");
+            return;
+          }
+          try {
+            const loginResponse = await fetch(`${API_BASE_URL}/api/auth/google`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ idToken }),
+            });
+            const payload = await loginResponse.json();
+            if (!loginResponse.ok) {
+              setAuthError(payload.error || "Google authentication failed.");
+              return;
+            }
+            setAuthError("");
+            setAuthToken(payload.token || "");
+            setCurrentUser(payload.username || "");
+            window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, payload.token || "");
+          } catch (_error) {
+            setAuthError("Unable to reach server. Try again.");
+          }
+        },
+      });
+      setGoogleReady(true);
+    };
+
+    if (existingScript) {
+      initGoogle();
+      return undefined;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = "true";
+    script.onload = initGoogle;
+    script.onerror = () => setAuthError("Unable to load Google Sign-In.");
+    document.head.appendChild(script);
+    return undefined;
+  }, [currentUser]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -462,11 +596,48 @@ export function App() {
     };
   }, [progress]);
 
+  const persistProgress = async (nextProgress) => {
+    setProgress(nextProgress);
+    if (!authToken) {
+      saveProgress(nextProgress);
+      return;
+    }
+    try {
+      await fetch(`${API_BASE_URL}/api/progress/me`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ progress: nextProgress }),
+      });
+    } catch (_error) {
+      // Keep optimistic UI state even if network call fails.
+    }
+  };
+
+  const triggerGoogleLogin = () => {
+    if (!window.google?.accounts?.id) {
+      setAuthError("Google Sign-In is not ready yet.");
+      return;
+    }
+    setAuthError("");
+    window.google.accounts.id.prompt();
+  };
+
+  const logout = () => {
+    setAuthToken("");
+    setCurrentUser("");
+    setProgress({});
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+  };
+
   const updateItemStatus = (itemId) => {
     const next = nextStatus(progress[itemId] || "not_started");
     const nextProgress = { ...progress, [itemId]: next };
-    setProgress(nextProgress);
-    saveProgress(nextProgress);
+    persistProgress(nextProgress);
   };
 
   const toggleWeek = (weekId) => {
@@ -478,8 +649,7 @@ export function App() {
   };
 
   const resetProgress = () => {
-    setProgress({});
-    saveProgress({});
+    persistProgress({});
   };
 
   const activeQuiz = activeQuizBank[quizQuestionIndex];
@@ -624,16 +794,46 @@ export function App() {
     );
   }
 
+  if (!currentUser) {
+    if (authChecking) {
+      return (
+        <div className="app-layout">
+          <main className="container auth-container">
+            <section className="auth-card">
+              <h1>MCU WATCHLIST</h1>
+              <p>Restoring your session...</p>
+            </section>
+          </main>
+        </div>
+      );
+    }
+    return (
+      <div className="app-layout">
+        <main className="container auth-container">
+          <section className="auth-card">
+            <h1>MCU WATCHLIST</h1>
+            <p>Sign in with Google to sync progress and join leaderboard rankings.</p>
+            {authError ? <p className="auth-error">{authError}</p> : null}
+            <button onClick={triggerGoogleLogin} disabled={!googleReady}>
+              {googleReady ? "Continue with Google" : "Loading Google Sign-In..."}
+            </button>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-layout">
       <main className="container">
       <header className="header hero">
         <div>
           <h1>MCU WATCHLIST</h1>
-          <p>No login required. Progress saved in your browser.</p>
+          <p>Signed in as @{currentUser}. Progress syncs to leaderboard.</p>
         </div>
         <div className="header-actions">
           <button onClick={resetProgress}>Reset Progress</button>
+          <button onClick={logout}>Logout</button>
         </div>
       </header>
 
@@ -728,6 +928,22 @@ export function App() {
           <h3>Progress</h3>
           <p>{stats.percent}%</p>
         </article>
+      </section>
+
+      <section className="leaderboard">
+        <h3>Leaderboard</h3>
+        <div className="leaderboard-list">
+          {leaderboard.slice(0, 8).map((entry, index) => (
+            <article
+              key={entry.username}
+              className={entry.username === currentUser ? "leaderboard-item current-user" : "leaderboard-item"}
+            >
+              <span>#{index + 1}</span>
+              <strong>{entry.username}</strong>
+              <span>{entry.completed} completed</span>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="list">

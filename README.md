@@ -1,13 +1,14 @@
 # MCU Watchlist V1
 
-React + Express app for tracking MCU rewatch progress without login.
+React + Express app for tracking MCU rewatch progress with Google login and shared leaderboard.
 
 ## What V1 includes
 
 - Arc-based MCU schedule loaded from your source HTML.
 - Film/show filtering and title search.
 - Three-state progress per item: `Not started`, `Watching`, `Completed`.
-- Local persistence via browser storage (refresh-safe on same browser/profile).
+- Google sign-in for shared account access.
+- Shared leaderboard that compares multi-user progress.
 - Backend scaffold with `/health` and `/api/schema`.
 
 ## Project structure
@@ -40,17 +41,30 @@ npm run dev:frontend
 npm run dev:backend
 ```
 
+## Environment setup
+
+Backend environment variables:
+
+- `OMDB_API_KEY`: required for poster lookup API.
+- `GOOGLE_CLIENT_ID`: required for Google token verification on backend.
+
+Frontend environment variables:
+
+- `VITE_API_BASE_URL`: backend base URL.
+- `VITE_GOOGLE_CLIENT_ID`: same Google OAuth web client ID used by backend.
+
 ## IMDb-aware poster API setup
 
 The app now uses the backend `/api/poster` endpoint backed by OMDb (includes IMDb IDs and poster URLs).
 
 1. Get a free OMDb API key from [https://www.omdbapi.com/apikey.aspx](https://www.omdbapi.com/apikey.aspx).
-2. Start backend with `OMDB_API_KEY` set.
+2. Start backend with `OMDB_API_KEY` and `GOOGLE_CLIENT_ID` set.
 
 PowerShell example:
 
 ```powershell
 $env:OMDB_API_KEY=\"your_key_here\"
+$env:GOOGLE_CLIENT_ID=\"your_google_oauth_web_client_id\"
 npm run dev:backend
 ```
 
@@ -84,8 +98,9 @@ Recommended free setup:
    - Root directory: `backend`
    - Build command: `npm install`
    - Start command: `npm start`
-4. Add environment variable:
+4. Add environment variables:
    - `OMDB_API_KEY=<your_key>`
+   - `GOOGLE_CLIENT_ID=<your_google_oauth_web_client_id>`
 5. Deploy and copy backend URL (example: `https://your-backend.onrender.com`).
 
 ### 2) Frontend on Vercel
@@ -95,8 +110,9 @@ Recommended free setup:
 3. Build settings:
    - Build command: `npm run build`
    - Output directory: `dist`
-4. Add environment variable:
+4. Add environment variables:
    - `VITE_API_BASE_URL=https://your-backend.onrender.com`
+   - `VITE_GOOGLE_CLIENT_ID=<your_google_oauth_web_client_id>`
 5. Deploy and open generated Vercel URL.
 
 ### 3) Share
