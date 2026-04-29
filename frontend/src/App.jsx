@@ -59,7 +59,6 @@ const formatMinutes = (minutes) => {
   }
   return `${hrs}h ${mins.toString().padStart(2, "0")}m`;
 };
-
 const normalizeFilmTitle = (title) => title.replace(/^Rewatch:\s*/i, "").trim();
 const normalizeShowTitle = (title) =>
   title
@@ -198,6 +197,8 @@ export function App() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [heroFilter, setHeroFilter] = useState("All heroes");
   const [query, setQuery] = useState("");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [expandedArcs, setExpandedArcs] = useState({});
   const [expandedWeeks, setExpandedWeeks] = useState({});
   const [progress, setProgress] = useState(() => loadProgress());
@@ -331,6 +332,62 @@ export function App() {
     () => filteredArcs.flatMap((arc) => arc.weeks.flatMap((week) => week.items)),
     [filteredArcs]
   );
+  const allItemsOrdered = useMemo(
+    () => seed.arcs.flatMap((arc) => arc.weeks.flatMap((week) => week.items)),
+    []
+  );
+  const computedScheduleDates = useMemo(() => {
+    const map = {};
+    const hasRange = Boolean(customStartDate && customEndDate);
+    if (!hasRange) {
+      allItemsOrdered.forEach((item) => {
+        map[item.id] = item.plannedDate;
+      });
+      return map;
+    }
+
+    const [startY, startM, startD] = customStartDate.split("-").map(Number);
+    const [endY, endM, endD] = customEndDate.split("-").map(Number);
+    const start = new Date(startY, (startM || 1) - 1, startD || 1);
+    const end = new Date(endY, (endM || 1) - 1, endD || 1);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      allItemsOrdered.forEach((item) => {
+        map[item.id] = item.plannedDate;
+      });
+      return map;
+    }
+
+    const arcItems = seed.arcs.map((arc) => arc.weeks.flatMap((week) => week.items));
+    const totalItems = arcItems.reduce((sum, items) => sum + items.length, 0);
+    const totalDays = Math.max(Math.round((end - start) / 86400000), 0);
+    let processedItems = 0;
+    arcItems.forEach((items, arcIndex) => {
+      const arcCount = items.length;
+      const arcStartOffset =
+        totalItems <= 0 ? 0 : Math.round((processedItems / totalItems) * totalDays);
+      processedItems += arcCount;
+      const arcEndOffset =
+        arcIndex === arcItems.length - 1
+          ? totalDays
+          : totalItems <= 0
+            ? 0
+            : Math.round((processedItems / totalItems) * totalDays);
+      const arcSpanDays = Math.max(arcEndOffset - arcStartOffset, 0);
+
+      items.forEach((item, index) => {
+        const offsetInArc =
+          arcCount <= 1 ? 0 : Math.round((index / (arcCount - 1)) * arcSpanDays);
+        const scheduled = new Date(start);
+        scheduled.setDate(start.getDate() + arcStartOffset + offsetInArc);
+        map[item.id] = scheduled.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      });
+    });
+    return map;
+  }, [allItemsOrdered, customEndDate, customStartDate]);
 
   const visiblePosterKeys = useMemo(() => {
     const unique = new Set();
@@ -619,6 +676,31 @@ export function App() {
             ))}
           </select>
         </div>
+        <div className="date-range-controls">
+          <label>
+            Start Date
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+            />
+          </label>
+          <label>
+            End Date
+            <input
+              type="date"
+              value={customEndDate}
+              min={customStartDate || undefined}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+            />
+          </label>
+          <button onClick={() => {
+            setCustomStartDate("");
+            setCustomEndDate("");
+          }}>
+            Use Original Dates
+          </button>
+        </div>
       </section>
 
       <section className="watchtime">
@@ -692,7 +774,7 @@ export function App() {
                                 className="item-row item-card"
                                 onClick={() => updateItemStatus(item.id)}
                               >
-                                <div>
+                                <div className="item-main">
                                   <strong>
                                     {posterUrl ? (
                                       <img
@@ -711,9 +793,7 @@ export function App() {
                                     )}
                                     {item.title}
                                   </strong>
-                                  <p>
-                                    {item.plannedDate} · {item.duration} · {item.type}
-                                  </p>
+                                  <p>{item.duration} · {item.type}</p>
                                   <p>Release: {getReleaseDateLabel(item)}</p>
                                   <p className="watch-links">
                                     <a
@@ -726,6 +806,7 @@ export function App() {
                                     </a>
                                   </p>
                                 </div>
+                                <span className="item-date">{computedScheduleDates[item.id] || item.plannedDate}</span>
                                 <span className={`status-pill ${statusClass[status]}`}>
                                   {statusLabel[status]}
                                 </span>
