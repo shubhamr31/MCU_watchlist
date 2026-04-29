@@ -81,6 +81,67 @@ const getWatchNowUrl = (title, type) => {
     ? `https://www.justwatch.com/in/movie/${slug}`
     : `https://www.justwatch.com/in/tv-show/${slug}`;
 };
+const RELEASE_DATES = {
+  films: {
+    "Iron Man": "May 2, 2008",
+    "Iron Man 2": "May 7, 2010",
+    Thor: "May 6, 2011",
+    "Captain America: The First Avenger": "Jul 22, 2011",
+    Avengers: "May 4, 2012",
+    "Iron Man 3": "May 3, 2013",
+    "Thor: The Dark World": "Nov 8, 2013",
+    "Captain America: The Winter Soldier": "Apr 4, 2014",
+    "Avengers: Age of Ultron": "May 1, 2015",
+    "Captain America: Civil War": "May 6, 2016",
+    "Doctor Strange": "Nov 4, 2016",
+    "Spider-Man: Homecoming": "Jul 7, 2017",
+    "Avengers: Infinity War": "Apr 27, 2018",
+    "Avengers: Endgame": "Apr 26, 2019",
+    "Spider-Man: Far From Home": "Jul 2, 2019",
+    "Spider-Man: No Way Home": "Dec 17, 2021",
+    "Guardians of the Galaxy": "Aug 1, 2014",
+    "Guardians of the Galaxy Vol. 2": "May 5, 2017",
+    "Thor: Ragnarok": "Nov 3, 2017",
+    "Black Panther": "Feb 16, 2018",
+    "Ant-Man and the Wasp": "Jul 6, 2018",
+    "Shang-Chi and the Legend of the Ten Rings": "Sep 3, 2021",
+    Eternals: "Nov 5, 2021",
+    "Doctor Strange in the Multiverse of Madness": "May 6, 2022",
+    "Thor: Love and Thunder": "Jul 8, 2022",
+    "Black Panther: Wakanda Forever": "Nov 11, 2022",
+    "Ant-Man and the Wasp: Quantumania": "Feb 17, 2023",
+    "Guardians of the Galaxy Vol. 3": "May 5, 2023",
+    "The Marvels": "Nov 10, 2023",
+    "Deadpool & Wolverine": "Jul 26, 2024",
+    "Captain America: Brave New World": "Feb 14, 2025",
+    "Thunderbolts*": "May 2, 2025",
+    "Fantastic Four: First Steps": "Jul 25, 2025",
+  },
+  shows: {
+    WandaVision: "Jan 15, 2021",
+    Daredevil: "Apr 10, 2015",
+    "Daredevil: Born Again": "Mar 4, 2025",
+    Punisher: "Nov 17, 2017",
+    "She-Hulk": "Aug 18, 2022",
+    "Jessica Jones": "Nov 20, 2015",
+    "Luke Cage": "Sep 30, 2016",
+    "Iron Fist": "Mar 17, 2017",
+    "The Defenders": "Aug 18, 2017",
+    Loki: "Jun 9, 2021",
+    "What If…?": "Aug 11, 2021",
+    Hawkeye: "Nov 24, 2021",
+    "Moon Knight": "Mar 30, 2022",
+    "Ms. Marvel": "Jun 8, 2022",
+    "Secret Invasion": "Jun 21, 2023",
+  },
+};
+const getReleaseDateLabel = (item) => {
+  if (item.type === "film") {
+    return RELEASE_DATES.films[normalizeFilmTitle(item.title)] || "TBA";
+  }
+  const normalizedShow = normalizeShowTitle(item.title);
+  return RELEASE_DATES.shows[normalizedShow] || "TBA";
+};
 const getHeroesForTitle = (title) => {
   const t = title.toLowerCase();
   const heroes = [];
@@ -653,6 +714,7 @@ export function App() {
                                   <p>
                                     {item.plannedDate} · {item.duration} · {item.type}
                                   </p>
+                                  <p>Release: {getReleaseDateLabel(item)}</p>
                                   <p className="watch-links">
                                     <a
                                       href={getWatchNowUrl(item.title, item.type)}
