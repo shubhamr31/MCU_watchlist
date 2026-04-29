@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildScheduleSeed } from "./data/normalizeSchedule";
-import { nextStatus, saveProgress } from "./utils/progressStore";
+import { loadProgress, nextStatus, saveProgress } from "./utils/progressStore";
 import { QUIZ_BANKS } from "./data/quizQuestions";
 
 const FILTERS = [
@@ -184,6 +184,8 @@ const QUIZ_WIDGET_STORAGE_KEY = "mcu_quiz_widget_position";
 const QUIZ_WIDGET_SIZE = 58;
 const AUTH_TOKEN_STORAGE_KEY = "mcu_watchlist_auth_token_v1";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+// TEMP: set to true to disable login gate for tonight.
+const TEMP_DISABLE_LOGIN_GATE = true;
 
 const seed = buildScheduleSeed();
 
@@ -210,7 +212,7 @@ export function App() {
   const [authChecking, setAuthChecking] = useState(() =>
     typeof window === "undefined" ? false : Boolean(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY))
   );
-  const [currentUser, setCurrentUser] = useState("");
+  const [currentUser, setCurrentUser] = useState(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
   const [authError, setAuthError] = useState("");
   const [googleReady, setGoogleReady] = useState(false);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -274,7 +276,7 @@ export function App() {
 
   useEffect(() => {
     if (!authToken) {
-      setCurrentUser("");
+      setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
       setProgress({});
       setAuthChecking(false);
       return;
@@ -310,6 +312,14 @@ export function App() {
     };
     hydrateUser();
   }, [authHeaders, authToken]);
+
+  useEffect(() => {
+    if (!TEMP_DISABLE_LOGIN_GATE) {
+      return;
+    }
+    // Keep old local progress behavior while login gate is disabled.
+    setProgress(loadProgress());
+  }, []);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -794,7 +804,7 @@ export function App() {
     );
   }
 
-  if (!currentUser) {
+  if (!currentUser && !TEMP_DISABLE_LOGIN_GATE) {
     if (authChecking) {
       return (
         <div className="app-layout">
