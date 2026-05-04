@@ -197,8 +197,8 @@ export function App() {
     }
     return window.matchMedia("(max-width: 640px)").matches;
   });
-  const [arcFilter, setArcFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [bndFilter, setBndFilter] = useState("all");
   const [heroFilter, setHeroFilter] = useState("All heroes");
   const [query, setQuery] = useState("");
   const [customStartDate, setCustomStartDate] = useState("");
@@ -442,16 +442,9 @@ export function App() {
     }
   }, [quizWidgetPosition]);
 
-  const visibleArcs = useMemo(() => {
-    if (arcFilter === "all") {
-      return seed.arcs;
-    }
-    return seed.arcs.filter((arc) => arc.id === arcFilter);
-  }, [arcFilter]);
-
   const filteredArcs = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return visibleArcs
+    return seed.arcs
       .map((arc) => {
         const weeks = arc.weeks
           .map((week) => ({
@@ -463,14 +456,16 @@ export function App() {
                 heroFilter === "All heroes"
                   ? true
                   : getHeroesForTitle(item.title).includes(heroFilter);
-              return typeOk && queryOk && heroOk;
+              const bndOk =
+                bndFilter === "all" ? true : Boolean(item.essentialBnd);
+              return typeOk && queryOk && heroOk && bndOk;
             }),
           }))
           .filter((week) => week.items.length > 0);
         return { ...arc, weeks };
       })
       .filter((arc) => arc.weeks.length > 0);
-  }, [visibleArcs, typeFilter, heroFilter, query]);
+  }, [typeFilter, heroFilter, query, bndFilter]);
 
   const allVisibleItems = useMemo(
     () => filteredArcs.flatMap((arc) => arc.weeks.flatMap((week) => week.items)),
@@ -848,21 +843,6 @@ export function App() {
       </header>
 
       <section className="controls">
-        <div className="tabs">
-          <button className={arcFilter === "all" ? "active" : ""} onClick={() => setArcFilter("all")}>
-            All Arcs
-          </button>
-          {seed.arcs.map((arc) => (
-            <button
-              key={arc.id}
-              className={arcFilter === arc.id ? "active" : ""}
-              onClick={() => setArcFilter(arc.id)}
-            >
-              {arc.emoji} {arc.name}
-            </button>
-          ))}
-        </div>
-
         <div className="filters">
           {FILTERS.map((filter) => (
             <button
@@ -873,6 +853,14 @@ export function App() {
               {filter.label}
             </button>
           ))}
+          <button
+            type="button"
+            className={bndFilter === "bnd" ? "active" : ""}
+            onClick={() => setBndFilter((prev) => (prev === "bnd" ? "all" : "bnd"))}
+            title="Must-watch for Spider-Man: Brand New Day"
+          >
+            🕷 Brand New Day essentials
+          </button>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -968,13 +956,25 @@ export function App() {
             {(expandedArcs[arc.id] ?? !isMobileView) && (
               <>
                 <p className="arc-note">{arc.note}</p>
-                {arc.weeks.map((week) => {
+                {arc.weeks.map((week, weekIdx) => {
+                  const prevTimelineName = weekIdx > 0 ? arc.weeks[weekIdx - 1].timelineName : null;
+                  const showTimelineBanner =
+                    week.timelineName && week.timelineName !== prevTimelineName;
                   const isOpen = expandedWeeks[week.id] ?? !isMobileView;
                   const completedCount = week.items.filter(
                     (item) => progress[item.id] === "completed"
                   ).length;
                   return (
-                    <div key={week.id} className="week">
+                    <div key={week.id}>
+                      {showTimelineBanner ? (
+                        <div className="timeline-banner" role="region" aria-label={week.timelineName}>
+                          <h3 className="timeline-banner-title">{week.timelineName}</h3>
+                          {week.timelineNote ? (
+                            <p className="timeline-banner-note">{week.timelineNote}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    <div className="week">
                       <button className="week-header" onClick={() => toggleWeek(week.id)}>
                         <span>
                           {week.label} ({week.dates})
@@ -1018,6 +1018,15 @@ export function App() {
                                       </span>
                                     )}
                                     {item.title}
+                                    {item.type === "film" && item.essentialBnd ? (
+                                      <span className="bnd-spider-mark" title="Must-watch before Spider-Man: Brand New Day" aria-hidden="true">
+                                        <svg className="bnd-spider-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                          <circle cx="12" cy="12" r="10" fill="#e50914" opacity="0.25" />
+                                          <path d="M12 3v4M12 17v4M5 5l2.5 2.5M16.5 16.5L19 19M3 12h4M17 12h4M5 19l2.5-2.5M16.5 7.5L19 5" stroke="#e50914" strokeWidth="1.6" strokeLinecap="round" />
+                                          <circle cx="12" cy="12" r="2.2" fill="#e50914" />
+                                        </svg>
+                                      </span>
+                                    ) : null}
                                   </strong>
                                   <p>{item.duration} · {item.type}</p>
                                   <p>Release: {getReleaseDateLabel(item)}</p>
@@ -1041,6 +1050,7 @@ export function App() {
                           })}
                         </div>
                       )}
+                    </div>
                     </div>
                   );
                 })}

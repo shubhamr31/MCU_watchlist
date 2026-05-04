@@ -379,6 +379,41 @@ button:hover {
   color: #b3b3b3;
 }
 
+.timeline-banner {
+  margin: 14px 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #5a1f22;
+  background: linear-gradient(95deg, rgba(229, 9, 20, 0.18), rgba(23, 83, 178, 0.12));
+}
+
+.timeline-banner-title {
+  margin: 0 0 4px;
+  font-size: clamp(16px, 2vw, 20px);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #f8fafc;
+}
+
+.timeline-banner-note {
+  margin: 0;
+  font-size: 13px;
+  color: #c4c4c4;
+  line-height: 1.35;
+}
+
+.bnd-spider-mark {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.bnd-spider-svg {
+  display: block;
+  filter: drop-shadow(0 0 4px rgba(229, 9, 20, 0.45));
+}
+
 .week {
   border: 1px solid #303030;
   margin: 10px 0;
