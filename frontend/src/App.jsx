@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildScheduleSeed } from "./data/normalizeSchedule";
 import { loadProgress, nextStatus, saveProgress } from "./utils/progressStore";
+import {
+  supabase,
+  isSupabaseConfigured,
+  fetchWatchlistProgress,
+  upsertWatchlistProgress,
+} from "./lib/supabaseClient";
 import { QUIZ_BANKS } from "./data/quizQuestions";
 
 const FILTERS = [
@@ -211,12 +217,25 @@ export function App() {
   const [authToken, setAuthToken] = useState(() =>
     typeof window === "undefined" ? "" : window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || ""
   );
-  const [authChecking, setAuthChecking] = useState(() =>
-    typeof window === "undefined" ? false : Boolean(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY))
-  );
+  const [authChecking, setAuthChecking] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    if (window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
+      return true;
+    }
+    if (!TEMP_DISABLE_LOGIN_GATE && isSupabaseConfigured) {
+      return true;
+    }
+    return false;
+  });
   const [currentUser, setCurrentUser] = useState(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
   const [authError, setAuthError] = useState("");
   const [googleReady, setGoogleReady] = useState(false);
+  const [supabaseUser, setSupabaseUser] = useState(null);
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [magicLinkSending, setMagicLinkSending] = useState(false);
+  const [magicLinkInfo, setMagicLinkInfo] = useState("");
   const [leaderboard, setLeaderboard] = useState([]);
   const [posterMap, setPosterMap] = useState({});
   const [quizOpen, setQuizOpen] = useState(false);
@@ -278,9 +297,14 @@ export function App() {
 
   useEffect(() => {
     if (!authToken) {
-      setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
-      setProgress({});
       setAuthChecking(false);
+      if (!supabaseUser) {
+        if (isSupabaseConfigured) {
+          return;
+        }
+        setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
+        setProgress(TEMP_DISABLE_LOGIN_GATE ? loadProgress() : {});
+      }
       return;
     }
     const hydrateUser = async () => {
@@ -313,14 +337,66 @@ export function App() {
       }
     };
     hydrateUser();
-  }, [authHeaders, authToken]);
+  }, [authHeaders, authToken, supabaseUser, isSupabaseConfigured]);
 
   useEffect(() => {
-    if (!TEMP_DISABLE_LOGIN_GATE) {
-      return;
+    if (!supabase) {
+      return undefined;
     }
-    // Keep old local progress behavior while login gate is disabled.
-    setProgress(loadProgress());
+    const applySession = async (session) => {
+      const user = session?.user ?? null;
+      setSupabaseUser(user);
+      if (user) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        }
+        setAuthToken("");
+        setAuthError("");
+        setMagicLinkInfo("");
+        const email = user.email || "";
+        setCurrentUser(email.split("@")[0] || "Fan");
+        try {
+          const remote = await fetchWatchlistProgress(supabase, user.id);
+          if (remote && Object.keys(remote).length > 0) {
+            setProgress(remote);
+          } else {
+            const local = loadProgress();
+            setProgress(local);
+            if (Object.keys(local).length > 0) {
+              await upsertWatchlistProgress(supabase, user.id, local);
+            }
+          }
+        } catch (_error) {
+          setAuthError("Could not load cloud progress. Check the Supabase table and RLS policies.");
+          setProgress(loadProgress());
+        }
+        setAuthChecking(false);
+        return;
+      }
+      setAuthChecking(false);
+      const hasBackendToken =
+        typeof window !== "undefined" && Boolean(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
+      if (!hasBackendToken) {
+        setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
+        setProgress(TEMP_DISABLE_LOGIN_GATE ? loadProgress() : {});
+      }
+    };
+
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) {
+        applySession(session);
+      }
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+    });
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -346,7 +422,9 @@ export function App() {
       return undefined;
     }
     if (!GOOGLE_CLIENT_ID) {
-      setAuthError("Google Sign-In is not configured. Add VITE_GOOGLE_CLIENT_ID.");
+      if (!isSupabaseConfigured) {
+        setAuthError("Add VITE_GOOGLE_CLIENT_ID or Supabase keys (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY).");
+      }
       return undefined;
     }
 
@@ -378,6 +456,9 @@ export function App() {
             setAuthToken(payload.token || "");
             setCurrentUser(payload.username || "");
             window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, payload.token || "");
+            if (supabase) {
+              await supabase.auth.signOut();
+            }
           } catch (_error) {
             setAuthError("Unable to reach server. Try again.");
           }
@@ -399,7 +480,7 @@ export function App() {
     script.onerror = () => setAuthError("Unable to load Google Sign-In.");
     document.head.appendChild(script);
     return undefined;
-  }, [currentUser]);
+  }, [currentUser, supabaseUser]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -605,6 +686,14 @@ export function App() {
 
   const persistProgress = async (nextProgress) => {
     setProgress(nextProgress);
+    if (supabaseUser && supabase) {
+      try {
+        await upsertWatchlistProgress(supabase, supabaseUser.id, nextProgress);
+      } catch (_error) {
+        // Keep optimistic UI; next update retries cloud sync.
+      }
+      return;
+    }
     if (!authToken) {
       saveProgress(nextProgress);
       return;
@@ -632,10 +721,47 @@ export function App() {
     window.google.accounts.id.prompt();
   };
 
-  const logout = () => {
+  const sendMagicLink = async (event) => {
+    event?.preventDefault?.();
+    if (!supabase) {
+      setAuthError("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+      return;
+    }
+    const email = magicLinkEmail.trim();
+    if (!email) {
+      setAuthError("Enter your email address.");
+      return;
+    }
+    setMagicLinkSending(true);
+    setAuthError("");
+    setMagicLinkInfo("");
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}${window.location.pathname || "/"}`,
+        },
+      });
+      if (error) {
+        setAuthError(error.message);
+      } else {
+        setMagicLinkInfo("Check your email for the sign-in link, then return here.");
+      }
+    } catch (_error) {
+      setAuthError("Could not send magic link. Try again.");
+    } finally {
+      setMagicLinkSending(false);
+    }
+  };
+
+  const logout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     setAuthToken("");
-    setCurrentUser("");
-    setProgress({});
+    setSupabaseUser(null);
+    setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
+    setProgress(TEMP_DISABLE_LOGIN_GATE ? loadProgress() : {});
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
@@ -819,11 +945,38 @@ export function App() {
         <main className="container auth-container">
           <section className="auth-card">
             <h1>MCU WATCHLIST</h1>
-            <p>Sign in with Google to sync progress and join leaderboard rankings.</p>
+            <p>
+              Sign in to sync progress. Use a free email magic link (Supabase) or Google for leaderboard sync on this
+              server.
+            </p>
+            {isSupabaseConfigured ? (
+              <form onSubmit={sendMagicLink} className="auth-magic-form">
+                <label htmlFor="magic-link-email-auth">
+                  Email (magic link)
+                  <input
+                    id="magic-link-email-auth"
+                    type="email"
+                    autoComplete="email"
+                    value={magicLinkEmail}
+                    onChange={(e) => setMagicLinkEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </label>
+                <button type="submit" disabled={magicLinkSending}>
+                  {magicLinkSending ? "Sending link…" : "Email me a magic link"}
+                </button>
+              </form>
+            ) : null}
+            {magicLinkInfo ? <p className="auth-success">{magicLinkInfo}</p> : null}
             {authError ? <p className="auth-error">{authError}</p> : null}
-            <button onClick={triggerGoogleLogin} disabled={!googleReady}>
-              {googleReady ? "Continue with Google" : "Loading Google Sign-In..."}
-            </button>
+            {GOOGLE_CLIENT_ID ? (
+              <>
+                <p className="auth-divider">or</p>
+                <button type="button" onClick={triggerGoogleLogin} disabled={!googleReady}>
+                  {googleReady ? "Continue with Google" : "Loading Google Sign-In…"}
+                </button>
+              </>
+            ) : null}
           </section>
         </main>
       </div>
@@ -836,7 +989,35 @@ export function App() {
       <header className="header hero">
         <div>
           <h1>MCU WATCHLIST</h1>
-          <p>Signed in as @{currentUser}. Progress syncs to leaderboard.</p>
+          <p>
+            Signed in as @{currentUser}.
+            {supabaseUser
+              ? " Progress is saved to your account (email)."
+              : authToken
+                ? " Progress syncs to leaderboard."
+                : TEMP_DISABLE_LOGIN_GATE
+                  ? " Progress on this device only."
+                  : ""}
+          </p>
+          {TEMP_DISABLE_LOGIN_GATE && currentUser === "Guest" && isSupabaseConfigured ? (
+            <div className="header-magic-wrap">
+              <p className="header-magic-hint">Optional: save progress with a free email magic link.</p>
+              <form onSubmit={sendMagicLink} className="header-magic-form">
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={magicLinkEmail}
+                  onChange={(e) => setMagicLinkEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+                <button type="submit" disabled={magicLinkSending}>
+                  {magicLinkSending ? "Sending…" : "Magic link"}
+                </button>
+              </form>
+              {magicLinkInfo ? <p className="auth-success">{magicLinkInfo}</p> : null}
+              {authError ? <p className="auth-error">{authError}</p> : null}
+            </div>
+          ) : null}
         </div>
         <div className="header-actions">
           <button onClick={resetProgress}>Reset Progress</button>
@@ -960,8 +1141,11 @@ export function App() {
                 <p className="arc-note">{arc.note}</p>
                 {arc.weeks.map((week, weekIdx) => {
                   const prevTimelineName = weekIdx > 0 ? arc.weeks[weekIdx - 1].timelineName : null;
-                  const showTimelineBanner =
-                    week.timelineName && week.timelineName !== prevTimelineName;
+                  const timelineChanged =
+                    Boolean(week.timelineName) && week.timelineName !== prevTimelineName;
+                  const mergedEndgameSaga =
+                    typeof arc.name === "string" && arc.name.toLowerCase().includes("mcu rewatch");
+                  const showTimelineBanner = timelineChanged && !mergedEndgameSaga;
                   const isOpen = expandedWeeks[week.id] ?? !isMobileView;
                   const completedCount = week.items.filter(
                     (item) => progress[item.id] === "completed"
@@ -979,6 +1163,9 @@ export function App() {
                     <div className="week">
                       <button className="week-header" onClick={() => toggleWeek(week.id)}>
                         <span>
+                          {mergedEndgameSaga && timelineChanged ? (
+                            <span className="week-timeline-chip">{week.timelineName} · </span>
+                          ) : null}
                           {week.label} ({week.dates})
                         </span>
                         <span>
