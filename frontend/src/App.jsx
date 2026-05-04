@@ -1230,9 +1230,9 @@ export function App() {
                                     {isSpiderSupportItem(item) ? (
                                       <span className="spider-mark" title="Spider-Man support pick" aria-hidden="true">
                                         <svg className="spider-mark-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                          <circle cx="12" cy="12" r="10" fill="#e50914" opacity="0.25" />
-                                          <path d="M12 3v4M12 17v4M5 5l2.5 2.5M16.5 16.5L19 19M3 12h4M17 12h4M5 19l2.5-2.5M16.5 7.5L19 5" stroke="#e50914" strokeWidth="1.6" strokeLinecap="round" />
-                                          <circle cx="12" cy="12" r="2.2" fill="#e50914" />
+                                          <circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.25" />
+                                          <path d="M12 3v4M12 17v4M5 5l2.5 2.5M16.5 16.5L19 19M3 12h4M17 12h4M5 19l2.5-2.5M16.5 7.5L19 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                                          <circle cx="12" cy="12" r="2.2" fill="currentColor" />
                                         </svg>
                                       </span>
                                     ) : null}
