@@ -8,10 +8,10 @@ export const RAW_ARCS = [
     iso: "2026-09-25",
     hrs: "~190 hrs",
     note:
-      "Merged Spider-Man: Brand New Day path with the Endgame rerelease buffer. Includes Daredevil (Netflix), Daredevil: Born Again (seasons 1–2), Punisher, and She-Hulk, then the Netflix Defenders buffer. Road to Endgame lists Infinity Saga films in US theatrical release order through Endgame. Road to Doomsday continues post–Endgame through the Sep 2026 window.",
+      "Endgame split checkpoint: Pre Endgame covers Infinity Saga release order through Avengers: Endgame, while Post Endgame continues into the bridge run with Spider-Man, Daredevil, Punisher, She-Hulk, and the Defenders buffer through Sep 2026.",
     timelines: [
       {
-        name: "Road to Endgame",
+        name: "Pre Endgame",
         note: "Infinity Saga films in US theatrical release order through Avengers: Endgame.",
         weeks: [
           {
@@ -62,9 +62,9 @@ export const RAW_ARCS = [
         ],
       },
       {
-        name: "Road to Doomsday",
+        name: "Post Endgame",
         note:
-          "Post–Endgame through the Endgame rerelease window: WandaVision, Spider-Man films, Daredevil (Netflix) and Daredevil: Born Again (seasons 1–2), Punisher, She-Hulk, then Jessica Jones through Defenders plus an Infinity War revisit. Continues toward Avengers: Doomsday prep.",
+          "Post–Endgame bridge run: WandaVision, Spider-Man films, Daredevil (Netflix) and Daredevil: Born Again (seasons 1–2), Punisher, She-Hulk, then Jessica Jones through Defenders plus an Infinity War revisit before Doomsday prep.",
         weeks: [
           {
             label: "Week 4",

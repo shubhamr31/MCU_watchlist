@@ -14,6 +14,17 @@ const FILTERS = [
   { id: "film", label: "Films only" },
   { id: "show", label: "Shows only" },
 ];
+const SPIDERMAN_SUPPORT_TITLES = [
+  "WandaVision",
+  "Daredevil",
+  "Daredevil: Born Again",
+  "Punisher",
+  "She-Hulk",
+  "Jessica Jones",
+  "Luke Cage",
+  "Iron Fist",
+  "The Defenders",
+];
 const HERO_FILTERS = [
   "All heroes",
   "Iron Man",
@@ -175,6 +186,13 @@ const getHeroesForTitle = (title) => {
   if (heroes.length === 0) heroes.push("All heroes");
   return Array.from(new Set(heroes));
 };
+const isSpiderSupportItem = (item) => {
+  if (item.essentialBnd) {
+    return true;
+  }
+  const normalized = item.type === "film" ? normalizeFilmTitle(item.title) : normalizeShowTitle(item.title);
+  return SPIDERMAN_SUPPORT_TITLES.some((baseTitle) => normalized.includes(baseTitle));
+};
 const shuffle = (arr) => {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -206,7 +224,7 @@ export function App() {
     return window.matchMedia("(max-width: 640px)").matches;
   });
   const [typeFilter, setTypeFilter] = useState("all");
-  const [bndFilter, setBndFilter] = useState("all");
+  const [spiderSupportFilter, setSpiderSupportFilter] = useState("all");
   const [heroFilter, setHeroFilter] = useState("All heroes");
   const [query, setQuery] = useState("");
   const [customStartDate, setCustomStartDate] = useState("");
@@ -540,7 +558,7 @@ export function App() {
                   ? true
                   : getHeroesForTitle(item.title).includes(heroFilter);
               const bndOk =
-                bndFilter === "all" ? true : Boolean(item.essentialBnd);
+                spiderSupportFilter === "all" ? true : isSpiderSupportItem(item);
               return typeOk && queryOk && heroOk && bndOk;
             }),
           }))
@@ -548,7 +566,7 @@ export function App() {
         return { ...arc, weeks };
       })
       .filter((arc) => arc.weeks.length > 0);
-  }, [typeFilter, heroFilter, query, bndFilter]);
+  }, [typeFilter, heroFilter, query, spiderSupportFilter]);
 
   const allVisibleItems = useMemo(
     () => filteredArcs.flatMap((arc) => arc.weeks.flatMap((week) => week.items)),
@@ -1038,11 +1056,13 @@ export function App() {
           ))}
           <button
             type="button"
-            className={bndFilter === "bnd" ? "active" : ""}
-            onClick={() => setBndFilter((prev) => (prev === "bnd" ? "all" : "bnd"))}
-            title="Must-watch for Spider-Man: Brand New Day"
+            className={spiderSupportFilter === "spider-support" ? "active" : ""}
+            onClick={() =>
+              setSpiderSupportFilter((prev) => (prev === "spider-support" ? "all" : "spider-support"))
+            }
+            title="Show only Spider-Man supporting movies and shows"
           >
-            🕷 Brand New Day essentials
+            🕷 Spider-Man support only
           </button>
           <input
             value={query}
@@ -1207,9 +1227,9 @@ export function App() {
                                       </span>
                                     )}
                                     {item.title}
-                                    {item.essentialBnd ? (
-                                      <span className="bnd-spider-mark" title="Must-watch before Spider-Man: Brand New Day" aria-hidden="true">
-                                        <svg className="bnd-spider-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    {isSpiderSupportItem(item) ? (
+                                      <span className="spider-mark" title="Spider-Man support pick" aria-hidden="true">
+                                        <svg className="spider-mark-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                                           <circle cx="12" cy="12" r="10" fill="#e50914" opacity="0.25" />
                                           <path d="M12 3v4M12 17v4M5 5l2.5 2.5M16.5 16.5L19 19M3 12h4M17 12h4M5 19l2.5-2.5M16.5 7.5L19 5" stroke="#e50914" strokeWidth="1.6" strokeLinecap="round" />
                                           <circle cx="12" cy="12" r="2.2" fill="#e50914" />

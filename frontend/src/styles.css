@@ -468,14 +468,14 @@ button:hover {
   color: #fca5a5;
 }
 
-.bnd-spider-mark {
+.spider-mark {
   display: inline-flex;
   align-items: center;
   margin-left: 6px;
   vertical-align: middle;
 }
 
-.bnd-spider-svg {
+.spider-mark-svg {
   display: block;
   filter: drop-shadow(0 0 4px rgba(229, 9, 20, 0.45));
 }
