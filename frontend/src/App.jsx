@@ -1018,7 +1018,7 @@ export function App() {
                                       </span>
                                     )}
                                     {item.title}
-                                    {item.type === "film" && item.essentialBnd ? (
+                                    {item.essentialBnd ? (
                                       <span className="bnd-spider-mark" title="Must-watch before Spider-Man: Brand New Day" aria-hidden="true">
                                         <svg className="bnd-spider-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                                           <circle cx="12" cy="12" r="10" fill="#e50914" opacity="0.25" />
