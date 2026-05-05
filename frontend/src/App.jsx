@@ -210,6 +210,8 @@ const QUIZ_WIDGET_STORAGE_KEY = "mcu_quiz_widget_position";
 const QUIZ_WIDGET_SIZE = 58;
 const AUTH_TOKEN_STORAGE_KEY = "mcu_watchlist_auth_token_v1";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+const USERNAME_PATTERN = /^[a-zA-Z0-9]{6}$/;
+const PASSKEY_PATTERN = /^\d{6}$/;
 // Set to false to require login before entering app.
 const TEMP_DISABLE_LOGIN_GATE = false;
 
@@ -249,6 +251,10 @@ export function App() {
   });
   const [currentUser, setCurrentUser] = useState(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassKey, setAuthPassKey] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState(null);
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
@@ -739,6 +745,48 @@ export function App() {
     window.google.accounts.id.prompt();
   };
 
+  const submitCredentialsAuth = async (event) => {
+    event?.preventDefault?.();
+    const username = authUsername.trim();
+    const passKey = authPassKey.trim();
+    if (!USERNAME_PATTERN.test(username)) {
+      setAuthError("Username must be exactly 6 letters/numbers.");
+      return;
+    }
+    if (!PASSKEY_PATTERN.test(passKey)) {
+      setAuthError("PassKey must be exactly 6 digits.");
+      return;
+    }
+    setAuthSubmitting(true);
+    setAuthError("");
+    try {
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+      const endpoint = authMode === "register" ? "/api/auth/register" : "/api/auth/login";
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: passKey }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setAuthError(payload.error || "Authentication failed.");
+        return;
+      }
+      setAuthToken(payload.token || "");
+      setCurrentUser(payload.username || "");
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, payload.token || "");
+      }
+      setAuthPassKey("");
+    } catch (_error) {
+      setAuthError("Could not reach server. Try again.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
   const sendMagicLink = async (event) => {
     event?.preventDefault?.();
     if (!supabase) {
@@ -964,9 +1012,49 @@ export function App() {
           <section className="auth-card">
             <h1>MCU WATCHLIST</h1>
             <p>
-              Sign in to sync progress. Use a free email magic link (Supabase) or Google for leaderboard sync on this
-              server.
+              TVA Access Console. Create or use a 6-character username and 6-digit PassKey.
             </p>
+            <form onSubmit={submitCredentialsAuth} className="auth-credentials-form">
+              <label htmlFor="auth-username">
+                Username (6 alphanumeric)
+                <input
+                  id="auth-username"
+                  type="text"
+                  autoComplete="username"
+                  maxLength={6}
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                  placeholder="A1B2C3"
+                />
+              </label>
+              <label htmlFor="auth-passkey">
+                PassKey (6 digits)
+                <input
+                  id="auth-passkey"
+                  type="password"
+                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={authPassKey}
+                  onChange={(e) => setAuthPassKey(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="••••••"
+                />
+              </label>
+              <button type="submit" disabled={authSubmitting}>
+                {authSubmitting ? "Authorizing..." : authMode === "register" ? "Create TVA Account" : "Enter TVA"}
+              </button>
+            </form>
+            <button
+              type="button"
+              className="auth-switch"
+              onClick={() => {
+                setAuthMode((prev) => (prev === "register" ? "login" : "register"));
+                setAuthError("");
+              }}
+            >
+              {authMode === "register" ? "Already have TVA access? Sign in" : "Need access? Create account"}
+            </button>
+            <p className="auth-divider">or</p>
             {isSupabaseConfigured ? (
               <form onSubmit={sendMagicLink} className="auth-magic-form">
                 <label htmlFor="magic-link-email-auth">
@@ -989,7 +1077,6 @@ export function App() {
             {authError ? <p className="auth-error">{authError}</p> : null}
             {GOOGLE_CLIENT_ID ? (
               <>
-                <p className="auth-divider">or</p>
                 <button type="button" onClick={triggerGoogleLogin} disabled={!googleReady}>
                   {googleReady ? "Continue with Google" : "Loading Google Sign-In…"}
                 </button>

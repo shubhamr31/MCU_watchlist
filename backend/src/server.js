@@ -12,7 +12,8 @@ const PORT = process.env.PORT || 4000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
-const USERNAME_PATTERN = /^[a-zA-Z0-9]{6,}$/;
+const USERNAME_PATTERN = /^[a-zA-Z0-9]{6}$/;
+const PASSKEY_PATTERN = /^\d{6}$/;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
@@ -98,11 +99,11 @@ app.post("/api/auth/register", async (req, res) => {
   const password = safePassword(req.body?.password);
   if (!USERNAME_PATTERN.test(username)) {
     return res.status(400).json({
-      error: "Username must be at least 6 characters and only letters/numbers.",
+      error: "Username must be exactly 6 alphanumeric characters.",
     });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters." });
+  if (!PASSKEY_PATTERN.test(password)) {
+    return res.status(400).json({ error: "PassKey must be exactly 6 digits." });
   }
   if (store.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
     return res.status(409).json({ error: "Username is already taken." });
@@ -128,13 +129,16 @@ app.post("/api/auth/register", async (req, res) => {
 app.post("/api/auth/login", async (req, res) => {
   const username = safeUsername(req.body?.username);
   const password = safePassword(req.body?.password);
+  if (!USERNAME_PATTERN.test(username) || !PASSKEY_PATTERN.test(password)) {
+    return res.status(401).json({ error: "Invalid username or PassKey." });
+  }
   const user = store.users.find((entry) => entry.username.toLowerCase() === username.toLowerCase());
   if (!user) {
-    return res.status(401).json({ error: "Invalid username or password." });
+    return res.status(401).json({ error: "Invalid username or PassKey." });
   }
   const incomingHash = hashPassword(password, user.salt);
   if (incomingHash !== user.passwordHash) {
-    return res.status(401).json({ error: "Invalid username or password." });
+    return res.status(401).json({ error: "Invalid username or PassKey." });
   }
   const token = randomBytes(32).toString("hex");
   store.sessions[token] = user.username;
