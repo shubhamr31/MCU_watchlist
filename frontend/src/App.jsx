@@ -90,7 +90,7 @@ const slugify = (value) =>
     .replace(/^-|-$/g, "");
 const getLocalPosterUrl = (title) => `/posters/${slugify(title)}.jpg`;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-const BUILD_ID = import.meta.env.VITE_BUILD_ID || "dev-local";
+const BUILD_ID = import.meta.env.VITE_BUILD_ID || import.meta.env.VITE_GIT_COMMIT || "dev-local";
 const getWatchNowUrl = (title, type) => {
   const normalized = type === "film" ? normalizeFilmTitle(title) : normalizeShowTitle(title);
   const slug = slugify(normalized);
