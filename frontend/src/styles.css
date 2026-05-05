@@ -440,6 +440,69 @@ button:hover {
   box-shadow: inset 0 0 0 1px var(--tva-glow);
 }
 
+.admin-panel {
+  margin: 12px 0 18px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--tva-border-warm);
+  background: linear-gradient(180deg, rgba(232, 137, 58, 0.1), rgba(21, 30, 37, 0.95));
+}
+
+.admin-panel h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 13px;
+  color: var(--tva-orange);
+}
+
+.admin-panel p {
+  margin: 0 0 10px;
+  color: var(--tva-text-muted);
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--tva-border);
+  border-radius: 8px;
+  background: var(--tva-bg-card);
+}
+
+.admin-form h4 {
+  margin: 0;
+  font-size: 12px;
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tva-cream);
+}
+
+.admin-users-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--tva-border);
+  background: var(--tva-bg-card);
+}
+
 .arc {
   margin: 20px 0;
   border: 1px solid var(--tva-border);

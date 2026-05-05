@@ -14,6 +14,7 @@ const DATA_DIR = path.join(__dirname, "../data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 const USERNAME_PATTERN = /^[a-zA-Z0-9]{6}$/;
 const PASSKEY_PATTERN = /^\d{6}$/;
+const ADMIN_USERNAMES = new Set(["loki69"]);
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
@@ -21,6 +22,7 @@ const DEFAULT_STORE = {
   users: [],
   sessions: {},
   progressByUser: {},
+  leaderboardAdjustments: {},
 };
 
 let store = { ...DEFAULT_STORE };
@@ -32,6 +34,7 @@ const hashPassword = (password, salt) =>
 
 const safeUsername = (value) => String(value || "").trim();
 const safePassword = (value) => String(value || "");
+const isAdminUsername = (username) => ADMIN_USERNAMES.has(String(username || "").toLowerCase());
 
 const parseBearerToken = (authHeader) => {
   if (!authHeader) {
@@ -73,6 +76,10 @@ const loadStore = async () => {
       sessions: parsed.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {},
       progressByUser:
         parsed.progressByUser && typeof parsed.progressByUser === "object" ? parsed.progressByUser : {},
+      leaderboardAdjustments:
+        parsed.leaderboardAdjustments && typeof parsed.leaderboardAdjustments === "object"
+          ? parsed.leaderboardAdjustments
+          : {},
     };
   } catch (_error) {
     store = { ...DEFAULT_STORE };
@@ -211,8 +218,15 @@ const requireAuth = (req, res, next) => {
   return next();
 };
 
+const requireAdmin = (req, res, next) => {
+  if (!isAdminUsername(req.auth?.username)) {
+    return res.status(403).json({ error: "Admin access required." });
+  }
+  return next();
+};
+
 app.get("/api/auth/me", requireAuth, (req, res) => {
-  res.json({ username: req.auth.username });
+  res.json({ username: req.auth.username, isAdmin: isAdminUsername(req.auth.username) });
 });
 
 app.get("/api/progress/me", requireAuth, (req, res) => {
@@ -232,15 +246,75 @@ app.get("/api/leaderboard", (_req, res) => {
     const values = Object.values(progress || {});
     const completed = values.filter((status) => status === "completed").length;
     const watching = values.filter((status) => status === "watching").length;
+    const adjustment = Number(store.leaderboardAdjustments?.[username] || 0);
+    const baseScore = completed * 100 + watching * 10;
     return {
       username,
       completed,
       watching,
-      score: completed * 100 + watching * 10,
+      baseScore,
+      adjustment,
+      score: baseScore + adjustment,
     };
   });
   rows.sort((a, b) => b.score - a.score || b.completed - a.completed || a.username.localeCompare(b.username));
   res.json({ leaderboard: rows.slice(0, 25) });
+});
+
+app.get("/api/admin/users", requireAuth, requireAdmin, (_req, res) => {
+  const users = store.users
+    .map((user) => ({
+      username: user.username,
+      createdAt: user.createdAt || null,
+      provider: user.provider || "credentials",
+      isAdmin: isAdminUsername(user.username),
+      adjustment: Number(store.leaderboardAdjustments?.[user.username] || 0),
+    }))
+    .sort((a, b) => a.username.localeCompare(b.username));
+  res.json({ users });
+});
+
+app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  const username = safeUsername(req.body?.username);
+  const passKey = safePassword(req.body?.passKey);
+  if (!USERNAME_PATTERN.test(username)) {
+    return res.status(400).json({ error: "Username must be exactly 6 alphanumeric characters." });
+  }
+  if (!PASSKEY_PATTERN.test(passKey)) {
+    return res.status(400).json({ error: "PassKey must be exactly 6 digits." });
+  }
+  if (store.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
+    return res.status(409).json({ error: "Username is already taken." });
+  }
+
+  const salt = randomBytes(16).toString("hex");
+  const passwordHash = hashPassword(passKey, salt);
+  store.users.push({
+    username,
+    salt,
+    passwordHash,
+    createdAt: new Date().toISOString(),
+  });
+  store.progressByUser[username] = {};
+  await saveStore();
+  return res.json({ ok: true, username });
+});
+
+app.put("/api/admin/leaderboard-adjustment", requireAuth, requireAdmin, async (req, res) => {
+  const username = safeUsername(req.body?.username);
+  const adjustment = Number(req.body?.adjustment);
+  if (!username) {
+    return res.status(400).json({ error: "username is required." });
+  }
+  if (!Number.isFinite(adjustment) || Math.abs(adjustment) > 5000) {
+    return res.status(400).json({ error: "adjustment must be a number between -5000 and 5000." });
+  }
+  if (!store.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
+    return res.status(404).json({ error: "User not found." });
+  }
+  store.leaderboardAdjustments[username] = Math.round(adjustment);
+  await saveStore();
+  return res.json({ ok: true, username, adjustment: store.leaderboardAdjustments[username] });
 });
 
 app.get("/api/poster", async (req, res) => {

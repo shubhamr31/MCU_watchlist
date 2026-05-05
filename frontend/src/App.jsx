@@ -212,6 +212,7 @@ const AUTH_TOKEN_STORAGE_KEY = "mcu_watchlist_auth_token_v1";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const USERNAME_PATTERN = /^[a-zA-Z0-9]{6}$/;
 const PASSKEY_PATTERN = /^\d{6}$/;
+const ADMIN_USERNAME = "LOKI69";
 // Set to false to require login before entering app.
 const TEMP_DISABLE_LOGIN_GATE = false;
 
@@ -261,6 +262,14 @@ export function App() {
   const [magicLinkSending, setMagicLinkSending] = useState(false);
   const [magicLinkInfo, setMagicLinkInfo] = useState("");
   const [leaderboard, setLeaderboard] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminMessage, setAdminMessage] = useState("");
+  const [adminError, setAdminError] = useState("");
+  const [adminUsernameInput, setAdminUsernameInput] = useState("");
+  const [adminPassKeyInput, setAdminPassKeyInput] = useState("");
+  const [leaderboardUsernameInput, setLeaderboardUsernameInput] = useState("");
+  const [leaderboardAdjustmentInput, setLeaderboardAdjustmentInput] = useState("0");
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
   const [posterMap, setPosterMap] = useState({});
   const [quizOpen, setQuizOpen] = useState(false);
   const [isDraggingWidget, setIsDraggingWidget] = useState(false);
@@ -310,6 +319,10 @@ export function App() {
   const authHeaders = useMemo(
     () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     [authToken]
+  );
+  const isAdmin = useMemo(
+    () => Boolean(authToken) && String(currentUser || "").toUpperCase() === ADMIN_USERNAME,
+    [authToken, currentUser]
   );
 
   useEffect(() => {
@@ -440,6 +453,26 @@ export function App() {
     const timer = window.setInterval(fetchLeaderboard, 30000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAdminUsers([]);
+      return;
+    }
+    const fetchAdminUsers = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: authHeaders });
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        setAdminUsers(payload.users || []);
+      } catch (_error) {
+        // Ignore transient admin fetch failures.
+      }
+    };
+    fetchAdminUsers();
+  }, [API_BASE_URL, authHeaders, isAdmin]);
 
   useEffect(() => {
     if (currentUser || typeof window === "undefined") {
@@ -817,6 +850,101 @@ export function App() {
       setAuthError("Could not send magic link. Try again.");
     } finally {
       setMagicLinkSending(false);
+    }
+  };
+
+  const refreshAdminUsers = async () => {
+    if (!isAdmin) {
+      return;
+    }
+    const response = await fetch(`${API_BASE_URL}/api/admin/users`, { headers: authHeaders });
+    if (!response.ok) {
+      throw new Error("Could not load admin users.");
+    }
+    const payload = await response.json();
+    setAdminUsers(payload.users || []);
+  };
+
+  const createUserAsAdmin = async (event) => {
+    event?.preventDefault?.();
+    const username = adminUsernameInput.trim().toUpperCase();
+    const passKey = adminPassKeyInput.trim();
+    if (!USERNAME_PATTERN.test(username)) {
+      setAdminError("New username must be exactly 6 alphanumeric characters.");
+      return;
+    }
+    if (!PASSKEY_PATTERN.test(passKey)) {
+      setAdminError("New PassKey must be exactly 6 digits.");
+      return;
+    }
+    setAdminSubmitting(true);
+    setAdminError("");
+    setAdminMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ username, passKey }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setAdminError(payload.error || "Could not create user.");
+        return;
+      }
+      setAdminMessage(`User ${username} created.`);
+      setAdminUsernameInput("");
+      setAdminPassKeyInput("");
+      await refreshAdminUsers();
+    } catch (_error) {
+      setAdminError("Could not create user right now.");
+    } finally {
+      setAdminSubmitting(false);
+    }
+  };
+
+  const updateLeaderboardAdjustment = async (event) => {
+    event?.preventDefault?.();
+    const username = leaderboardUsernameInput.trim().toUpperCase();
+    const adjustment = Number(leaderboardAdjustmentInput);
+    if (!username) {
+      setAdminError("Enter username for leaderboard adjustment.");
+      return;
+    }
+    if (!Number.isFinite(adjustment)) {
+      setAdminError("Adjustment must be a number.");
+      return;
+    }
+    setAdminSubmitting(true);
+    setAdminError("");
+    setAdminMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/leaderboard-adjustment`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
+        body: JSON.stringify({ username, adjustment }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setAdminError(payload.error || "Could not update adjustment.");
+        return;
+      }
+      setAdminMessage(`Leaderboard adjustment updated for ${username}.`);
+      await refreshAdminUsers();
+      const boardResponse = await fetch(`${API_BASE_URL}/api/leaderboard`);
+      if (boardResponse.ok) {
+        const boardPayload = await boardResponse.json();
+        setLeaderboard(boardPayload.leaderboard || []);
+      }
+    } catch (_error) {
+      setAdminError("Could not update leaderboard.");
+    } finally {
+      setAdminSubmitting(false);
     }
   };
 
@@ -1233,6 +1361,65 @@ export function App() {
           ))}
         </div>
       </section>
+
+      {isAdmin ? (
+        <section className="admin-panel">
+          <h3>TVA Admin Console</h3>
+          <p>Create users and tune leaderboard adjustments.</p>
+          {adminMessage ? <p className="auth-success">{adminMessage}</p> : null}
+          {adminError ? <p className="auth-error">{adminError}</p> : null}
+          <div className="admin-grid">
+            <form onSubmit={createUserAsAdmin} className="admin-form">
+              <h4>Add User</h4>
+              <input
+                type="text"
+                placeholder="Username (6 chars)"
+                maxLength={6}
+                value={adminUsernameInput}
+                onChange={(e) => setAdminUsernameInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+              />
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="PassKey (6 digits)"
+                value={adminPassKeyInput}
+                onChange={(e) => setAdminPassKeyInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+              <button type="submit" disabled={adminSubmitting}>Create User</button>
+            </form>
+            <form onSubmit={updateLeaderboardAdjustment} className="admin-form">
+              <h4>Leaderboard Adjustment</h4>
+              <input
+                type="text"
+                placeholder="Username"
+                maxLength={6}
+                value={leaderboardUsernameInput}
+                onChange={(e) =>
+                  setLeaderboardUsernameInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                }
+              />
+              <input
+                type="number"
+                step="1"
+                placeholder="Adjustment (e.g. 100)"
+                value={leaderboardAdjustmentInput}
+                onChange={(e) => setLeaderboardAdjustmentInput(e.target.value)}
+              />
+              <button type="submit" disabled={adminSubmitting}>Save Adjustment</button>
+            </form>
+          </div>
+          <div className="admin-users-list">
+            {adminUsers.map((user) => (
+              <article key={user.username} className="admin-user-row">
+                <strong>{user.username}</strong>
+                <span>{user.isAdmin ? "Admin" : "User"}</span>
+                <span>Adj: {user.adjustment ?? 0}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="list">
         {filteredArcs.map((arc) => (
