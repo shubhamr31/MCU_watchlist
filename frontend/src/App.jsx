@@ -267,8 +267,6 @@ export function App() {
   const [adminError, setAdminError] = useState("");
   const [adminUsernameInput, setAdminUsernameInput] = useState("");
   const [adminPassKeyInput, setAdminPassKeyInput] = useState("");
-  const [leaderboardUsernameInput, setLeaderboardUsernameInput] = useState("");
-  const [leaderboardAdjustmentInput, setLeaderboardAdjustmentInput] = useState("0");
   const [adminSubmitting, setAdminSubmitting] = useState(false);
   const [posterMap, setPosterMap] = useState({});
   const [quizOpen, setQuizOpen] = useState(false);
@@ -913,49 +911,6 @@ export function App() {
     }
   };
 
-  const updateLeaderboardAdjustment = async (event) => {
-    event?.preventDefault?.();
-    const username = leaderboardUsernameInput.trim().toUpperCase();
-    const adjustment = Number(leaderboardAdjustmentInput);
-    if (!username) {
-      setAdminError("Enter username for leaderboard adjustment.");
-      return;
-    }
-    if (!Number.isFinite(adjustment)) {
-      setAdminError("Adjustment must be a number.");
-      return;
-    }
-    setAdminSubmitting(true);
-    setAdminError("");
-    setAdminMessage("");
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/leaderboard-adjustment`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders,
-        },
-        body: JSON.stringify({ username, adjustment }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        setAdminError(payload.error || "Could not update adjustment.");
-        return;
-      }
-      setAdminMessage(`Leaderboard adjustment updated for ${username}.`);
-      await refreshAdminUsers();
-      const boardResponse = await fetch(`${API_BASE_URL}/api/leaderboard`);
-      if (boardResponse.ok) {
-        const boardPayload = await boardResponse.json();
-        setLeaderboard(boardPayload.leaderboard || []);
-      }
-    } catch (_error) {
-      setAdminError("Could not update leaderboard.");
-    } finally {
-      setAdminSubmitting(false);
-    }
-  };
-
   const logout = async () => {
     if (supabase) {
       await supabase.auth.signOut();
@@ -1385,7 +1340,7 @@ export function App() {
       {isAdmin ? (
         <section className="admin-panel">
           <h3>TVA Admin Console</h3>
-          <p>Create users and tune leaderboard adjustments.</p>
+          <p>Create users.</p>
           {adminMessage ? <p className="auth-success">{adminMessage}</p> : null}
           {adminError ? <p className="auth-error">{adminError}</p> : null}
           <div className="admin-grid">
@@ -1408,33 +1363,12 @@ export function App() {
               />
               <button type="submit" disabled={adminSubmitting}>Create User</button>
             </form>
-            <form onSubmit={updateLeaderboardAdjustment} className="admin-form">
-              <h4>Leaderboard Adjustment</h4>
-              <input
-                type="text"
-                placeholder="Username"
-                maxLength={6}
-                value={leaderboardUsernameInput}
-                onChange={(e) =>
-                  setLeaderboardUsernameInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
-                }
-              />
-              <input
-                type="number"
-                step="1"
-                placeholder="Adjustment (e.g. 100)"
-                value={leaderboardAdjustmentInput}
-                onChange={(e) => setLeaderboardAdjustmentInput(e.target.value)}
-              />
-              <button type="submit" disabled={adminSubmitting}>Save Adjustment</button>
-            </form>
           </div>
           <div className="admin-users-list">
             {adminUsers.map((user) => (
               <article key={user.username} className="admin-user-row">
                 <strong>{user.username}</strong>
                 <span>{user.isAdmin ? "Admin" : "User"}</span>
-                <span>Adj: {user.adjustment ?? 0}</span>
               </article>
             ))}
           </div>

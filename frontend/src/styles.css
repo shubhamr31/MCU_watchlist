@@ -499,7 +499,7 @@ button:hover {
 
 .admin-user-row {
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) auto auto;
+  grid-template-columns: minmax(80px, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;

@@ -22,7 +22,6 @@ const DEFAULT_STORE = {
   users: [],
   sessions: {},
   progressByUser: {},
-  leaderboardAdjustments: {},
 };
 
 let store = { ...DEFAULT_STORE };
@@ -76,10 +75,6 @@ const loadStore = async () => {
       sessions: parsed.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {},
       progressByUser:
         parsed.progressByUser && typeof parsed.progressByUser === "object" ? parsed.progressByUser : {},
-      leaderboardAdjustments:
-        parsed.leaderboardAdjustments && typeof parsed.leaderboardAdjustments === "object"
-          ? parsed.leaderboardAdjustments
-          : {},
     };
   } catch (_error) {
     store = { ...DEFAULT_STORE };
@@ -246,15 +241,11 @@ app.get("/api/leaderboard", (_req, res) => {
     const values = Object.values(progress || {});
     const completed = values.filter((status) => status === "completed").length;
     const watching = values.filter((status) => status === "watching").length;
-    const adjustment = Number(store.leaderboardAdjustments?.[username] || 0);
-    const baseScore = completed * 100 + watching * 10;
     return {
       username,
       completed,
       watching,
-      baseScore,
-      adjustment,
-      score: baseScore + adjustment,
+      score: completed * 100 + watching * 10,
     };
   });
   rows.sort((a, b) => b.score - a.score || b.completed - a.completed || a.username.localeCompare(b.username));
@@ -268,7 +259,6 @@ app.get("/api/admin/users", requireAuth, requireAdmin, (_req, res) => {
       createdAt: user.createdAt || null,
       provider: user.provider || "credentials",
       isAdmin: isAdminUsername(user.username),
-      adjustment: Number(store.leaderboardAdjustments?.[user.username] || 0),
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
   res.json({ users });
@@ -298,23 +288,6 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
   store.progressByUser[username] = {};
   await saveStore();
   return res.json({ ok: true, username });
-});
-
-app.put("/api/admin/leaderboard-adjustment", requireAuth, requireAdmin, async (req, res) => {
-  const username = safeUsername(req.body?.username);
-  const adjustment = Number(req.body?.adjustment);
-  if (!username) {
-    return res.status(400).json({ error: "username is required." });
-  }
-  if (!Number.isFinite(adjustment) || Math.abs(adjustment) > 5000) {
-    return res.status(400).json({ error: "adjustment must be a number between -5000 and 5000." });
-  }
-  if (!store.users.some((user) => user.username.toLowerCase() === username.toLowerCase())) {
-    return res.status(404).json({ error: "User not found." });
-  }
-  store.leaderboardAdjustments[username] = Math.round(adjustment);
-  await saveStore();
-  return res.json({ ok: true, username, adjustment: store.leaderboardAdjustments[username] });
 });
 
 app.get("/api/poster", async (req, res) => {

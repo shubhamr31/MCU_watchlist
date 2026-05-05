@@ -61,6 +61,12 @@ export const buildScheduleSeed = () => {
       });
     }
 
+    const normalizedWeeks = weeks.map((week, index) => ({
+      ...week,
+      // Keep week numbering consistent across merged timelines/arcs.
+      label: `Week ${index + 1}`,
+    }));
+
     return {
       id: arcId,
       name: arc.name,
@@ -69,7 +75,7 @@ export const buildScheduleSeed = () => {
       iso: arc.iso,
       hrs: arc.hrs,
       note: arc.note,
-      weeks,
+      weeks: normalizedWeeks,
     };
   });
 
