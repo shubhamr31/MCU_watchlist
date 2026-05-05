@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../data");
-const STORE_FILE = path.join(DATA_DIR, "store.json");
+const STORE_FILE = process.env.STORE_FILE || path.join(DATA_DIR, "store.json");
 const USERNAME_PATTERN = /^[a-zA-Z0-9]{6}$/;
 const PASSKEY_PATTERN = /^\d{6}$/;
 const ADMIN_USERNAMES = new Set(["loki69"]);
@@ -63,7 +63,7 @@ const sanitizeProgress = (progress) => {
 };
 
 const saveStore = async () => {
-  await mkdir(DATA_DIR, { recursive: true });
+  await mkdir(path.dirname(STORE_FILE), { recursive: true });
   await writeFile(STORE_FILE, JSON.stringify(store, null, 2), "utf8");
 };
 
