@@ -90,6 +90,7 @@ const slugify = (value) =>
     .replace(/^-|-$/g, "");
 const getLocalPosterUrl = (title) => `/posters/${slugify(title)}.jpg`;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+const BUILD_ID = import.meta.env.VITE_BUILD_ID || "dev-local";
 const getWatchNowUrl = (title, type) => {
   const normalized = type === "film" ? normalizeFilmTitle(title) : normalizeShowTitle(title);
   const slug = slugify(normalized);
@@ -1274,6 +1275,7 @@ export function App() {
                   ? " Progress on this device only."
                   : ""}
           </p>
+          <p className="build-badge">TVA Build: {BUILD_ID}</p>
           {TEMP_DISABLE_LOGIN_GATE && currentUser === "Guest" && isSupabaseConfigured ? (
             <div className="header-magic-wrap">
               <p className="header-magic-hint">Optional: save progress with a free email magic link.</p>

@@ -368,6 +368,21 @@ body::after {
   color: var(--tva-text-muted);
 }
 
+.build-badge {
+  display: inline-block;
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 191, 117, 0.62);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(232, 137, 58, 0.18), rgba(42, 79, 86, 0.22));
+  color: #ffd3a2;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(232, 137, 58, 0.35);
+}
+
 button,
 input,
 select {
