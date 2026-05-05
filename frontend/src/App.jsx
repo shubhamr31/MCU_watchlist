@@ -797,11 +797,19 @@ export function App() {
         await supabase.auth.signOut();
       }
       const endpoint = authMode === "register" ? "/api/auth/register" : "/api/auth/login";
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const requestInit = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password: passKey }),
-      });
+      };
+      let response;
+      try {
+        response = await fetch(`${API_BASE_URL}${endpoint}`, requestInit);
+      } catch (_firstError) {
+        // Render free tier may cold-start; retry once after short delay.
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        response = await fetch(`${API_BASE_URL}${endpoint}`, requestInit);
+      }
       const payload = await response.json();
       if (!response.ok) {
         setAuthError(payload.error || "Authentication failed.");
@@ -814,7 +822,7 @@ export function App() {
       }
       setAuthPassKey("");
     } catch (_error) {
-      setAuthError("Could not reach server. Try again.");
+      setAuthError("Server is waking up or unreachable. Wait a few seconds and try again.");
     } finally {
       setAuthSubmitting(false);
     }
@@ -1210,6 +1218,18 @@ export function App() {
                 </button>
               </>
             ) : null}
+          </section>
+          <section className="leaderboard auth-leaderboard">
+            <h3>Leaderboard</h3>
+            <div className="leaderboard-list">
+              {leaderboard.slice(0, 8).map((entry, index) => (
+                <article key={entry.username} className="leaderboard-item">
+                  <span>#{index + 1}</span>
+                  <strong>{entry.username}</strong>
+                  <span>{entry.completed} completed</span>
+                </article>
+              ))}
+            </div>
           </section>
         </main>
       </div>
