@@ -25,6 +25,7 @@ const mapWeekRowsToItems = (week, weekId, arcId) =>
   });
 
 export const buildScheduleSeed = () => {
+  let globalWeekNumber = 1;
   const arcs = RAW_ARCS.map((arc, arcIndex) => {
     const arcId = `arc-${arcIndex + 1}-${slugify(arc.name)}`;
 
@@ -61,10 +62,10 @@ export const buildScheduleSeed = () => {
       });
     }
 
-    const normalizedWeeks = weeks.map((week, index) => ({
+    const normalizedWeeks = weeks.map((week) => ({
       ...week,
-      // Keep week numbering consistent across merged timelines/arcs.
-      label: `Week ${index + 1}`,
+      // Keep week numbering consistent across both arcs (global sequence).
+      label: `Week ${globalWeekNumber++}`,
     }));
 
     return {
