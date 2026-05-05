@@ -32,13 +32,37 @@
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 12% 18%, rgba(232, 137, 58, 0.14), transparent 38%),
-    radial-gradient(circle at 88% 12%, rgba(42, 79, 86, 0.35), transparent 42%),
-    radial-gradient(circle at 50% 100%, rgba(237, 228, 211, 0.05), transparent 48%),
-    linear-gradient(180deg, #12171c 0%, var(--tva-bg) 45%, #0f1317 100%);
+    radial-gradient(circle at 12% 18%, rgba(232, 137, 58, 0.24), transparent 34%),
+    radial-gradient(circle at 86% 12%, rgba(42, 79, 86, 0.48), transparent 40%),
+    radial-gradient(circle at 50% 100%, rgba(237, 228, 211, 0.09), transparent 44%),
+    linear-gradient(180deg, #0b1014 0%, #11181e 46%, #090d10 100%);
   color: var(--tva-text);
   overflow-x: hidden;
   min-width: 320px;
+  position: relative;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  background:
+    linear-gradient(125deg, rgba(3, 5, 7, 0.68), rgba(3, 5, 7, 0.56)),
+    url("/tva-tree.svg") center/cover no-repeat;
+  opacity: 0.72;
+}
+
+body::after {
+  background:
+    radial-gradient(circle at 74% 48%, rgba(232, 137, 58, 0.3), transparent 34%),
+    url("/loki-silhouette.svg") right 2vw bottom -30px / min(34vw, 390px) no-repeat;
+  opacity: 0.36;
 }
 
 .marvel-loader {
@@ -105,11 +129,43 @@ body {
 }
 
 .app-layout {
+  position: relative;
   display: flex;
   justify-content: center;
   width: 100%;
   max-width: 100vw;
   min-height: 100vh;
+}
+
+.app-layout::before,
+.app-layout::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-layout::before {
+  z-index: 2;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(246, 221, 183, 0.06) 0,
+      rgba(246, 221, 183, 0.06) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  mix-blend-mode: soft-light;
+  opacity: 0.35;
+}
+
+.app-layout::after {
+  z-index: 1;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 55%, rgba(5, 8, 10, 0.58) 100%),
+    radial-gradient(circle at 20% 15%, rgba(240, 168, 106, 0.08), transparent 36%),
+    radial-gradient(circle at 80% 75%, rgba(46, 196, 166, 0.08), transparent 36%);
+  animation: crtFlicker 3.2s steps(18, end) infinite;
 }
 
 .container {
@@ -130,9 +186,12 @@ body {
   width: min(460px, 95vw);
   padding: 20px;
   border-radius: 14px;
-  border: 1px solid var(--tva-border-warm);
-  background: linear-gradient(145deg, rgba(31, 39, 46, 0.96), rgba(18, 23, 28, 0.94));
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(240, 168, 106, 0.6);
+  background: linear-gradient(145deg, rgba(20, 30, 37, 0.95), rgba(10, 14, 18, 0.94));
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(240, 168, 106, 0.2),
+    inset 0 0 28px rgba(232, 137, 58, 0.08);
 }
 
 .auth-card h1 {
@@ -246,12 +305,16 @@ body {
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(110deg, rgba(232, 137, 58, 0.28) 0%, rgba(42, 79, 86, 0.45) 52%, rgba(15, 20, 24, 0.95) 100%),
-    radial-gradient(circle at 14% 48%, rgba(237, 228, 211, 0.12), transparent 38%);
-  border: 1px solid var(--tva-border-warm);
+    linear-gradient(110deg, rgba(232, 137, 58, 0.33) 0%, rgba(42, 79, 86, 0.54) 52%, rgba(6, 9, 12, 0.98) 100%),
+    radial-gradient(circle at 12% 46%, rgba(237, 228, 211, 0.18), transparent 34%);
+  border: 1px solid rgba(240, 168, 106, 0.62);
   border-radius: 12px;
   padding: 18px;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.42);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(232, 137, 58, 0.18),
+    inset 0 0 30px rgba(0, 0, 0, 0.28);
+  animation: alertPanelPulse 2.8s ease-in-out infinite;
 }
 
 .hero::before {
@@ -266,7 +329,26 @@ body {
     transparent 2px,
     transparent 14px
   );
-  opacity: 0.25;
+  opacity: 0.34;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(240, 168, 106, 0.14) 35%, transparent 70%),
+    radial-gradient(circle at 88% 18%, rgba(240, 168, 106, 0.22), transparent 26%);
+  mix-blend-mode: screen;
+}
+
+.hero .header h1::after {
+  content: "  // ALERT MODE";
+  color: #ffbf75;
+  font-size: 0.55em;
+  letter-spacing: 0.16em;
+  opacity: 0.9;
 }
 
 .hero > * {
@@ -279,7 +361,7 @@ body {
   font-family: var(--font-display);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  text-shadow: 0 0 18px var(--tva-glow);
+  text-shadow: 0 0 18px var(--tva-glow), 0 0 2px rgba(240, 168, 106, 0.92);
 }
 
 .header p {
@@ -352,8 +434,10 @@ button:hover {
   margin: 12px 0 16px;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid var(--tva-border);
-  background: var(--tva-bg-elevated);
+  border: 1px solid rgba(92, 113, 124, 0.72);
+  background: linear-gradient(180deg, rgba(32, 42, 50, 0.96), rgba(18, 24, 30, 0.96));
+  position: relative;
+  animation: alertPanelPulse 3.4s ease-in-out infinite;
 }
 
 .watchtime h3 {
@@ -406,8 +490,10 @@ button:hover {
   margin: 12px 0 18px;
   padding: 12px;
   border-radius: 8px;
-  border: 1px solid var(--tva-border);
-  background: var(--tva-bg-elevated);
+  border: 1px solid rgba(92, 113, 124, 0.72);
+  background: linear-gradient(180deg, rgba(32, 42, 50, 0.96), rgba(18, 24, 30, 0.96));
+  position: relative;
+  animation: alertPanelPulse 3.8s ease-in-out infinite;
 }
 
 .leaderboard h3 {
@@ -527,21 +613,52 @@ button:hover {
 
 .arc {
   margin: 20px 0;
-  border: 1px solid var(--tva-border);
+  border: 1px solid rgba(83, 97, 109, 0.86);
   border-radius: 12px;
   padding: 12px;
-  background: linear-gradient(180deg, var(--tva-bg-elevated) 0%, #1a2128 100%);
+  background:
+    linear-gradient(180deg, rgba(29, 39, 47, 0.94) 0%, rgba(20, 26, 32, 0.94) 100%);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.arc::before,
+.arc::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(240, 168, 106, 0.72);
+  opacity: 0.85;
+  animation: alertBlink 1.8s steps(2, end) infinite;
+}
+
+.arc::before {
+  top: 6px;
+  left: 6px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.arc::after {
+  bottom: 6px;
+  right: 6px;
+  border-left: 0;
+  border-top: 0;
 }
 
 .arc-header {
   width: 100%;
-  border: 1px solid var(--tva-border);
+  border: 1px solid rgba(240, 168, 106, 0.38);
   border-radius: 10px;
-  background: var(--tva-bg-card);
+  background:
+    linear-gradient(90deg, rgba(40, 52, 63, 0.95), rgba(26, 34, 42, 0.95)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0, rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 8px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
+  box-shadow: inset 0 0 14px rgba(232, 137, 58, 0.08);
 }
 
 .arc-header h2 {
@@ -549,6 +666,7 @@ button:hover {
   font-size: clamp(18px, 2vw, 24px);
   font-family: var(--font-display);
   letter-spacing: 0.02em;
+  text-shadow: 0 0 10px rgba(232, 137, 58, 0.28);
 }
 
 .arc-header span {
@@ -568,8 +686,11 @@ button:hover {
   margin: 14px 0 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid var(--tva-border-warm);
-  background: linear-gradient(95deg, rgba(232, 137, 58, 0.12), rgba(42, 79, 86, 0.22));
+  border: 1px solid rgba(240, 168, 106, 0.44);
+  background:
+    linear-gradient(95deg, rgba(232, 137, 58, 0.2), rgba(42, 79, 86, 0.38)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0, rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 9px);
+  animation: alertPanelPulse 2.6s ease-in-out infinite;
 }
 
 .timeline-banner-title {
@@ -579,6 +700,7 @@ button:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--tva-cream);
+  text-shadow: 0 0 12px rgba(240, 168, 106, 0.3);
 }
 
 .timeline-banner-note {
@@ -611,20 +733,32 @@ button:hover {
 }
 
 .week {
-  border: 1px solid var(--tva-border);
+  border: 1px solid rgba(83, 97, 109, 0.9);
   margin: 10px 0;
   border-radius: 6px;
   overflow: hidden;
-  background: #1a2128;
+  background: linear-gradient(180deg, rgba(25, 33, 40, 0.96), rgba(18, 24, 30, 0.96));
 }
 
 .week-header {
   width: 100%;
   display: flex;
   justify-content: space-between;
-  background: var(--tva-bg-card);
+  background:
+    linear-gradient(90deg, rgba(37, 48, 57, 0.95), rgba(27, 35, 42, 0.95));
   font-family: var(--font-display);
   font-size: 13px;
+  text-shadow: 0 0 8px rgba(240, 168, 106, 0.22);
+  position: relative;
+}
+
+.week-header::after {
+  content: " TVA STATUS: WATCH WINDOW OPEN ";
+  font-size: 10px;
+  color: rgba(255, 191, 117, 0.92);
+  letter-spacing: 0.11em;
+  margin-left: 12px;
+  animation: alertBlink 1.6s steps(2, end) infinite;
 }
 
 .week-list {
@@ -639,9 +773,9 @@ button:hover {
   align-items: center;
   gap: 10px;
   border: none;
-  border-top: 1px solid var(--tva-border);
+  border-top: 1px solid rgba(78, 91, 102, 0.76);
   border-radius: 0;
-  background: #1c232a;
+  background: linear-gradient(90deg, rgba(28, 35, 42, 0.94), rgba(24, 31, 38, 0.94));
   text-align: left;
 }
 
@@ -652,16 +786,27 @@ button:hover {
 
 .item-card {
   width: 100%;
-  border: 1px solid var(--tva-border);
+  border: 1px solid rgba(80, 94, 106, 0.9);
   border-radius: 10px;
   padding: 12px;
   transition: box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  background: linear-gradient(180deg, rgba(34, 43, 51, 0.72), rgba(22, 29, 35, 0.72));
 }
 
 .item-card:hover {
-  border-color: #5c6570;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
-  background: var(--tva-bg-card);
+  border-color: rgba(240, 168, 106, 0.5);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.35),
+    inset 0 0 22px rgba(232, 137, 58, 0.08);
+  background: linear-gradient(180deg, rgba(39, 50, 60, 0.85), rgba(24, 33, 40, 0.84));
+}
+
+.status-watching {
+  box-shadow: 0 0 0 1px rgba(255, 191, 117, 0.45), 0 0 16px rgba(232, 137, 58, 0.22);
+}
+
+.container {
+  animation: crtBreath 5s ease-in-out infinite;
 }
 
 .item-row p {
@@ -1002,6 +1147,70 @@ button:hover {
   }
   100% {
     box-shadow: 0 0 42px rgba(232, 137, 58, 0.45);
+  }
+}
+
+@keyframes crtFlicker {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  8% {
+    opacity: 0.32;
+  }
+  11% {
+    opacity: 0.18;
+  }
+  17% {
+    opacity: 0.34;
+  }
+  30% {
+    opacity: 0.24;
+  }
+  48% {
+    opacity: 0.37;
+  }
+  63% {
+    opacity: 0.21;
+  }
+  79% {
+    opacity: 0.33;
+  }
+  92% {
+    opacity: 0.27;
+  }
+}
+
+@keyframes crtBreath {
+  0%,
+  100% {
+    filter: saturate(1) contrast(1);
+  }
+  50% {
+    filter: saturate(1.05) contrast(1.03);
+  }
+}
+
+@keyframes alertPanelPulse {
+  0%,
+  100% {
+    border-color: rgba(240, 168, 106, 0.42);
+    box-shadow: 0 0 0 1px rgba(240, 168, 106, 0.14), inset 0 0 18px rgba(232, 137, 58, 0.04);
+  }
+  50% {
+    border-color: rgba(255, 191, 117, 0.85);
+    box-shadow: 0 0 0 1px rgba(255, 191, 117, 0.32), 0 0 22px rgba(232, 137, 58, 0.24), inset 0 0 24px rgba(232, 137, 58, 0.08);
+  }
+}
+
+@keyframes alertBlink {
+  0%,
+  49% {
+    opacity: 0.25;
+  }
+  50%,
+  100% {
+    opacity: 0.95;
   }
 }
 

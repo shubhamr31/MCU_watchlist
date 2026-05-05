@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(800 470) rotate(90) scale(520 930)">
+      <stop stop-color="#2ec4a6" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#0a1116" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="trunk" x1="800" y1="220" x2="800" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f5b66a" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#6b3f1e" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="branch" x1="420" y1="240" x2="1180" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd7a3"/>
+      <stop offset="1" stop-color="#f0a257"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <path d="M800 740C790 618 792 482 800 250" stroke="url(#trunk)" stroke-width="14" stroke-linecap="round"/>
+  <path d="M800 280C690 250 610 230 515 175" stroke="url(#branch)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M800 310C922 282 1005 254 1108 190" stroke="url(#branch)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M800 352C710 334 646 320 558 275" stroke="url(#branch)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M800 382C900 366 978 348 1056 308" stroke="url(#branch)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M802 438C730 424 668 420 610 388" stroke="url(#branch)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M802 468C875 452 944 445 1008 411" stroke="url(#branch)" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="515" cy="175" r="4.5" fill="#ffe0b8"/>
+  <circle cx="1108" cy="190" r="4.5" fill="#ffe0b8"/>
+  <circle cx="558" cy="275" r="3.8" fill="#ffd2a2"/>
+  <circle cx="1056" cy="308" r="3.8" fill="#ffd2a2"/>
+  <circle cx="610" cy="388" r="3.2" fill="#f9c892"/>
+  <circle cx="1008" cy="411" r="3.2" fill="#f9c892"/>
+</svg>
