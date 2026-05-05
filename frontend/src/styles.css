@@ -453,6 +453,23 @@ button:hover {
   background: linear-gradient(180deg, rgba(232, 137, 58, 0.1), rgba(21, 30, 37, 0.95));
 }
 
+.account-settings {
+  margin: 12px 0 18px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--tva-border);
+  background: var(--tva-bg-elevated);
+}
+
+.account-settings h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 13px;
+  color: var(--tva-orange);
+}
+
 .admin-panel h3 {
   margin: 0 0 8px;
   font-family: var(--font-display);

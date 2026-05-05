@@ -268,6 +268,13 @@ export function App() {
   const [adminUsernameInput, setAdminUsernameInput] = useState("");
   const [adminPassKeyInput, setAdminPassKeyInput] = useState("");
   const [adminSubmitting, setAdminSubmitting] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [currentPassKeyInput, setCurrentPassKeyInput] = useState("");
+  const [newUsernameInput, setNewUsernameInput] = useState("");
+  const [newPassKeyInput, setNewPassKeyInput] = useState("");
+  const [accountSettingsMessage, setAccountSettingsMessage] = useState("");
+  const [accountSettingsError, setAccountSettingsError] = useState("");
+  const [accountSettingsSubmitting, setAccountSettingsSubmitting] = useState(false);
   const [posterMap, setPosterMap] = useState({});
   const [quizOpen, setQuizOpen] = useState(false);
   const [isDraggingWidget, setIsDraggingWidget] = useState(false);
@@ -924,6 +931,66 @@ export function App() {
     }
   };
 
+  const updateCredentials = async (event) => {
+    event?.preventDefault?.();
+    if (!authToken) {
+      setAccountSettingsError("Sign in with username/PassKey first.");
+      return;
+    }
+    const currentPassKey = currentPassKeyInput.trim();
+    const nextUsername = newUsernameInput.trim().toUpperCase();
+    const nextPassKey = newPassKeyInput.trim();
+    if (!PASSKEY_PATTERN.test(currentPassKey)) {
+      setAccountSettingsError("Current PassKey must be exactly 6 digits.");
+      return;
+    }
+    if (!nextUsername && !nextPassKey) {
+      setAccountSettingsError("Enter a new username, new PassKey, or both.");
+      return;
+    }
+    if (nextUsername && !USERNAME_PATTERN.test(nextUsername)) {
+      setAccountSettingsError("New username must be exactly 6 letters/numbers.");
+      return;
+    }
+    if (nextPassKey && !PASSKEY_PATTERN.test(nextPassKey)) {
+      setAccountSettingsError("New PassKey must be exactly 6 digits.");
+      return;
+    }
+
+    setAccountSettingsSubmitting(true);
+    setAccountSettingsError("");
+    setAccountSettingsMessage("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/credentials`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
+        body: JSON.stringify({
+          currentPassKey,
+          newUsername: nextUsername || undefined,
+          newPassKey: nextPassKey || undefined,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setAccountSettingsError(payload.error || "Could not update credentials.");
+        return;
+      }
+      const updatedUsername = payload.username || currentUser;
+      setCurrentUser(updatedUsername);
+      setCurrentPassKeyInput("");
+      setNewUsernameInput("");
+      setNewPassKeyInput("");
+      setAccountSettingsMessage("Credentials updated successfully.");
+    } catch (_error) {
+      setAccountSettingsError("Could not reach server while updating credentials.");
+    } finally {
+      setAccountSettingsSubmitting(false);
+    }
+  };
+
   const updateItemStatus = (itemId) => {
     const next = nextStatus(progress[itemId] || "not_started");
     const nextProgress = { ...progress, [itemId]: next };
@@ -1229,9 +1296,49 @@ export function App() {
         </div>
         <div className="header-actions">
           <button onClick={resetProgress}>Reset Progress</button>
+          {authToken ? (
+            <button onClick={() => setShowAccountSettings((prev) => !prev)}>
+              {showAccountSettings ? "Close Account Settings" : "Change Username / PassKey"}
+            </button>
+          ) : null}
           <button onClick={logout}>Logout</button>
         </div>
       </header>
+      {showAccountSettings && authToken ? (
+        <section className="account-settings">
+          <h3>Account Settings</h3>
+          <form onSubmit={updateCredentials} className="admin-form">
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Current PassKey (required)"
+              value={currentPassKeyInput}
+              onChange={(e) => setCurrentPassKeyInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+            <input
+              type="text"
+              maxLength={6}
+              placeholder="New Username (optional)"
+              value={newUsernameInput}
+              onChange={(e) => setNewUsernameInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+            />
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="New PassKey (optional)"
+              value={newPassKeyInput}
+              onChange={(e) => setNewPassKeyInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+            <button type="submit" disabled={accountSettingsSubmitting}>
+              {accountSettingsSubmitting ? "Updating..." : "Update Credentials"}
+            </button>
+          </form>
+          {accountSettingsMessage ? <p className="auth-success">{accountSettingsMessage}</p> : null}
+          {accountSettingsError ? <p className="auth-error">{accountSettingsError}</p> : null}
+        </section>
+      ) : null}
 
       <section className="controls">
         <div className="filters">

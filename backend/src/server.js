@@ -34,6 +34,7 @@ const hashPassword = (password, salt) =>
 const safeUsername = (value) => String(value || "").trim();
 const safePassword = (value) => String(value || "");
 const isAdminUsername = (username) => ADMIN_USERNAMES.has(String(username || "").toLowerCase());
+const hasCredentialPassword = (user) => Boolean(user?.salt && user?.passwordHash);
 
 const parseBearerToken = (authHeader) => {
   if (!authHeader) {
@@ -234,6 +235,68 @@ app.put("/api/progress/me", requireAuth, async (req, res) => {
   store.progressByUser[req.auth.username] = incomingProgress;
   await saveStore();
   res.json({ ok: true, updatedAt: new Date().toISOString() });
+});
+
+app.put("/api/auth/credentials", requireAuth, async (req, res) => {
+  const currentPassKey = safePassword(req.body?.currentPassKey);
+  const newUsernameInput = safeUsername(req.body?.newUsername);
+  const newPassKeyInput = safePassword(req.body?.newPassKey);
+  const username = req.auth.username;
+  const user = store.users.find((entry) => entry.username.toLowerCase() === username.toLowerCase());
+  if (!user) {
+    return res.status(404).json({ error: "User not found." });
+  }
+  if (!hasCredentialPassword(user)) {
+    return res.status(400).json({ error: "Credential changes are only available for username/PassKey accounts." });
+  }
+  const incomingHash = hashPassword(currentPassKey, user.salt);
+  if (incomingHash !== user.passwordHash) {
+    return res.status(401).json({ error: "Current PassKey is incorrect." });
+  }
+
+  const hasNewUsername = newUsernameInput.length > 0;
+  const hasNewPassKey = newPassKeyInput.length > 0;
+  if (!hasNewUsername && !hasNewPassKey) {
+    return res.status(400).json({ error: "Provide a new username, a new PassKey, or both." });
+  }
+
+  if (hasNewUsername) {
+    if (!USERNAME_PATTERN.test(newUsernameInput)) {
+      return res.status(400).json({ error: "New username must be exactly 6 alphanumeric characters." });
+    }
+    const usernameTaken = store.users.some(
+      (entry) => entry.username.toLowerCase() === newUsernameInput.toLowerCase() && entry !== user
+    );
+    if (usernameTaken) {
+      return res.status(409).json({ error: "Username is already taken." });
+    }
+  }
+
+  if (hasNewPassKey && !PASSKEY_PATTERN.test(newPassKeyInput)) {
+    return res.status(400).json({ error: "New PassKey must be exactly 6 digits." });
+  }
+
+  const nextUsername = hasNewUsername ? newUsernameInput : user.username;
+  if (hasNewUsername && nextUsername !== user.username) {
+    const existingProgress = store.progressByUser[user.username] || {};
+    store.progressByUser[nextUsername] = existingProgress;
+    delete store.progressByUser[user.username];
+    user.username = nextUsername;
+    Object.keys(store.sessions).forEach((token) => {
+      if (store.sessions[token] === username) {
+        store.sessions[token] = nextUsername;
+      }
+    });
+  }
+
+  if (hasNewPassKey) {
+    const nextSalt = randomBytes(16).toString("hex");
+    user.salt = nextSalt;
+    user.passwordHash = hashPassword(newPassKeyInput, nextSalt);
+  }
+
+  await saveStore();
+  return res.json({ ok: true, username: nextUsername });
 });
 
 app.get("/api/leaderboard", (_req, res) => {
