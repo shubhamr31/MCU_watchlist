@@ -168,6 +168,12 @@ body::after {
   animation: crtFlicker 3.2s steps(18, end) infinite;
 }
 
+.normal-mode::before,
+.normal-mode::after {
+  opacity: 0;
+  animation: none;
+}
+
 .container {
   width: 100%;
   max-width: 1240px;
@@ -349,6 +355,10 @@ body::after {
   font-size: 0.55em;
   letter-spacing: 0.16em;
   opacity: 0.9;
+}
+
+.normal-mode .hero .header h1::after {
+  content: "";
 }
 
 .hero > * {
@@ -662,6 +672,11 @@ button:hover {
   border-top: 0;
 }
 
+.normal-mode .arc::before,
+.normal-mode .arc::after {
+  content: none;
+}
+
 .arc-header {
   width: 100%;
   border: 1px solid rgba(240, 168, 106, 0.38);
@@ -776,6 +791,11 @@ button:hover {
   animation: alertBlink 1.6s steps(2, end) infinite;
 }
 
+.normal-mode .week-header::after {
+  content: "";
+  animation: none;
+}
+
 .week-list {
   display: flex;
   flex-direction: column;
@@ -822,6 +842,14 @@ button:hover {
 
 .container {
   animation: crtBreath 5s ease-in-out infinite;
+}
+
+.normal-mode .container,
+.normal-mode .hero,
+.normal-mode .watchtime,
+.normal-mode .leaderboard,
+.normal-mode .timeline-banner {
+  animation: none;
 }
 
 .item-row p {

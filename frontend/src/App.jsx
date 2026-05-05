@@ -270,6 +270,7 @@ export function App() {
   const [adminPassKeyInput, setAdminPassKeyInput] = useState("");
   const [adminSubmitting, setAdminSubmitting] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [alertModeEnabled, setAlertModeEnabled] = useState(true);
   const [currentPassKeyInput, setCurrentPassKeyInput] = useState("");
   const [newUsernameInput, setNewUsernameInput] = useState("");
   const [newPassKeyInput, setNewPassKeyInput] = useState("");
@@ -1260,7 +1261,7 @@ export function App() {
   }
 
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${alertModeEnabled ? "alert-mode" : "normal-mode"}`}>
       <main className="container">
       <header className="header hero">
         <div>
@@ -1297,6 +1298,9 @@ export function App() {
           ) : null}
         </div>
         <div className="header-actions">
+          <button onClick={() => setAlertModeEnabled((prev) => !prev)}>
+            {alertModeEnabled ? "Switch to Normal Mode" : "Switch to Alert Mode"}
+          </button>
           <button onClick={resetProgress}>Reset Progress</button>
           {authToken ? (
             <button onClick={() => setShowAccountSettings((prev) => !prev)}>
