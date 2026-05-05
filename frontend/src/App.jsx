@@ -210,8 +210,8 @@ const QUIZ_WIDGET_STORAGE_KEY = "mcu_quiz_widget_position";
 const QUIZ_WIDGET_SIZE = 58;
 const AUTH_TOKEN_STORAGE_KEY = "mcu_watchlist_auth_token_v1";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-// TEMP: set to true to disable login gate for tonight.
-const TEMP_DISABLE_LOGIN_GATE = true;
+// Set to false to require login before entering app.
+const TEMP_DISABLE_LOGIN_GATE = false;
 
 const seed = buildScheduleSeed();
 
