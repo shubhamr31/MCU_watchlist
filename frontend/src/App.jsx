@@ -214,8 +214,9 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const USERNAME_PATTERN = /^[a-zA-Z0-9]{6}$/;
 const PASSKEY_PATTERN = /^\d{6}$/;
 const ADMIN_USERNAME = "LOKI69";
-// Set to false to require login before entering app.
-const TEMP_DISABLE_LOGIN_GATE = false;
+// Guest-first mode: homepage loads without sign-in; progress uses sessionStorage only.
+// Set to false when login should be required again at startup.
+const GUEST_FIRST_HOME = true;
 
 const seed = buildScheduleSeed();
 
@@ -235,7 +236,9 @@ export function App() {
   const [customEndDate, setCustomEndDate] = useState("");
   const [expandedArcs, setExpandedArcs] = useState({});
   const [expandedWeeks, setExpandedWeeks] = useState({});
-  const [progress, setProgress] = useState({});
+  const [progress, setProgress] = useState(() =>
+    typeof window !== "undefined" && GUEST_FIRST_HOME ? loadProgress() : {}
+  );
   const [authToken, setAuthToken] = useState(() =>
     typeof window === "undefined" ? "" : window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || ""
   );
@@ -246,13 +249,14 @@ export function App() {
     if (window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
       return true;
     }
-    if (!TEMP_DISABLE_LOGIN_GATE && isSupabaseConfigured) {
+    if (!GUEST_FIRST_HOME && isSupabaseConfigured) {
       return true;
     }
     return false;
   });
-  const [currentUser, setCurrentUser] = useState(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
+  const [currentUser, setCurrentUser] = useState(GUEST_FIRST_HOME ? "Guest" : "");
   const [authError, setAuthError] = useState("");
+  const [showLoginScreen, setShowLoginScreen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [authUsername, setAuthUsername] = useState("");
   const [authPassKey, setAuthPassKey] = useState("");
@@ -339,15 +343,22 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // Dismiss the on-demand login screen as soon as the user is authenticated.
+  useEffect(() => {
+    if ((authToken || supabaseUser) && showLoginScreen) {
+      setShowLoginScreen(false);
+    }
+  }, [authToken, supabaseUser, showLoginScreen]);
+
   useEffect(() => {
     if (!authToken) {
       setAuthChecking(false);
       if (!supabaseUser) {
-        if (isSupabaseConfigured) {
+        if (isSupabaseConfigured && !GUEST_FIRST_HOME) {
           return;
         }
-        setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
-        setProgress(TEMP_DISABLE_LOGIN_GATE ? loadProgress() : {});
+        setCurrentUser(GUEST_FIRST_HOME ? "Guest" : "");
+        setProgress(GUEST_FIRST_HOME ? loadProgress() : {});
       }
       return;
     }
@@ -421,8 +432,8 @@ export function App() {
       const hasBackendToken =
         typeof window !== "undefined" && Boolean(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY));
       if (!hasBackendToken) {
-        setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
-        setProgress(TEMP_DISABLE_LOGIN_GATE ? loadProgress() : {});
+        setCurrentUser(GUEST_FIRST_HOME ? "Guest" : "");
+        setProgress(GUEST_FIRST_HOME ? loadProgress() : {});
       }
     };
 
@@ -926,8 +937,8 @@ export function App() {
     }
     setAuthToken("");
     setSupabaseUser(null);
-    setCurrentUser(TEMP_DISABLE_LOGIN_GATE ? "Guest" : "");
-    setProgress(TEMP_DISABLE_LOGIN_GATE ? loadProgress() : {});
+    setCurrentUser(GUEST_FIRST_HOME ? "Guest" : "");
+    setProgress(GUEST_FIRST_HOME ? loadProgress() : {});
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
@@ -1153,7 +1164,11 @@ export function App() {
     );
   }
 
-  if (!currentUser && !TEMP_DISABLE_LOGIN_GATE) {
+  const isAuthenticatedUser = Boolean(authToken) || Boolean(supabaseUser);
+  const isGuestBrowse = GUEST_FIRST_HOME && !isAuthenticatedUser;
+  const showAuthScreen = (!currentUser && !GUEST_FIRST_HOME) || (showLoginScreen && !isAuthenticatedUser);
+
+  if (showAuthScreen) {
     if (authChecking) {
       return (
         <div className="app-layout">
@@ -1170,6 +1185,19 @@ export function App() {
       <div className="app-layout">
         <main className="container auth-container">
           <section className="auth-card">
+            {GUEST_FIRST_HOME ? (
+              <button
+                type="button"
+                className="auth-switch"
+                onClick={() => {
+                  setShowLoginScreen(false);
+                  setAuthError("");
+                  setMagicLinkInfo("");
+                }}
+              >
+                ← Back to watchlist (guest session)
+              </button>
+            ) : null}
             <h1>MCU WATCHLIST</h1>
             <p>
               TVA Access Console. Create or use a 6-character username and 6-digit PassKey.
@@ -1267,17 +1295,26 @@ export function App() {
         <div>
           <h1>MCU WATCHLIST</h1>
           <p>
-            Signed in as @{currentUser}.
+            {isGuestBrowse ? (
+              <>
+                <strong>Guest session</strong> — progress is saved for this browser tab only (session storage).
+                Close the tab or browser and it resets unless you sign in.
+              </>
+            ) : (
+              <>
+                Signed in as @{currentUser}.
+              </>
+            )}
             {supabaseUser
               ? " Progress is saved to your account (email)."
               : authToken
                 ? " Progress syncs to leaderboard."
-                : TEMP_DISABLE_LOGIN_GATE
-                  ? " Progress on this device only."
+                : isGuestBrowse
+                  ? " Use Sign in in the header when login is working again."
                   : ""}
           </p>
           <p className="build-badge">TVA Build: {BUILD_ID}</p>
-          {TEMP_DISABLE_LOGIN_GATE && currentUser === "Guest" && isSupabaseConfigured ? (
+          {isGuestBrowse && isSupabaseConfigured ? (
             <div className="header-magic-wrap">
               <p className="header-magic-hint">Optional: save progress with a free email magic link.</p>
               <form onSubmit={sendMagicLink} className="header-magic-form">
@@ -1307,7 +1344,19 @@ export function App() {
               {showAccountSettings ? "Close Account Settings" : "Change Username / PassKey"}
             </button>
           ) : null}
-          <button onClick={logout}>Logout</button>
+          {isAuthenticatedUser ? (
+            <button onClick={logout}>Logout</button>
+          ) : (
+            <button
+              onClick={() => {
+                setAuthError("");
+                setMagicLinkInfo("");
+                setShowLoginScreen(true);
+              }}
+            >
+              Sign in
+            </button>
+          )}
         </div>
       </header>
       {showAccountSettings && authToken ? (

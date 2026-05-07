@@ -1,5 +1,8 @@
 -- Run this in Supabase Dashboard → SQL Editor after creating a project.
 -- Enables email magic-link users to store MCU watchlist progress in Postgres.
+--
+-- Guest / no-login browsing in the app does NOT use this table; it keeps progress in
+-- the browser session only (sessionStorage). Rows here are keyed by auth.users.id.
 
 create table if not exists public.watchlist_progress (
   user_id uuid primary key references auth.users (id) on delete cascade,

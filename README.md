@@ -47,11 +47,45 @@ Backend environment variables:
 
 - `OMDB_API_KEY`: required for poster lookup API.
 - `GOOGLE_CLIENT_ID`: required for Google token verification on backend.
+- `SUPABASE_URL`: Supabase project URL (see [Supabase free DB setup](#supabase-free-db-setup)).
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase **service_role** secret key. Server-only, never ship to browser.
 
 Frontend environment variables:
 
 - `VITE_API_BASE_URL`: backend base URL.
 - `VITE_GOOGLE_CLIENT_ID`: same Google OAuth web client ID used by backend.
+
+## Supabase free DB setup
+
+The backend stores user accounts, sessions, and per-user watchlist progress in Postgres via Supabase. The Free plan is enough for development and small apps; see [Supabase pricing](https://supabase.com/pricing).
+
+1. **Create the project** — sign in at [supabase.com](https://supabase.com) → **New project** → pick a region and a strong DB password → **Free** plan.
+2. **Copy your keys** — once the project is ready, go to **Project Settings → API** and copy:
+   - **Project URL** → paste into `SUPABASE_URL` in `backend/.env`.
+   - **`service_role` secret** → paste into `SUPABASE_SERVICE_ROLE_KEY` in `backend/.env`. Keep this secret; it has full DB access and must never be exposed in frontend code or committed to git.
+3. **Create the tables** — open **SQL Editor → New query**, paste the contents of [`supabase/migrations/setup_all.sql`](supabase/migrations/setup_all.sql), and click **Run**. This is a bundled, idempotent version of `001_watchlist_progress.sql` and `002_custom_auth.sql`. You can re-run it safely.
+4. **Restart the backend** so it picks up the new `.env` values:
+
+   ```powershell
+   npm run dev:backend
+   ```
+
+   On first request the server will create rows in `custom_users`, `custom_sessions`, and `custom_progress` as users register/log in.
+
+### Tables created
+
+| Table | Purpose |
+|-------|---------|
+| `public.custom_users` | Username + hashed passkey, or Google-linked accounts (used by backend `/api/auth/*`). |
+| `public.custom_sessions` | Bearer tokens issued by backend on login. |
+| `public.custom_progress` | Per-user MCU progress for backend-authed users. |
+| `public.watchlist_progress` | Optional: per-user progress when using Supabase Auth from the frontend (RLS-protected). |
+
+### Notes
+
+- Free Supabase projects pause after a period of inactivity — open the dashboard or hit the API to wake them.
+- The `service_role` key bypasses Row Level Security. That's why the `custom_*` tables don't need RLS policies as long as **only** the backend talks to them.
+- If you also want client-side Supabase Auth (e.g. email magic links), set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `frontend/.env` (anon key, not service role).
 
 ## IMDb-aware poster API setup
 
