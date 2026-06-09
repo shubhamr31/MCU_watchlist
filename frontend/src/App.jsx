@@ -2,6 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { buildScheduleSeed } from "./data/normalizeSchedule";
 import { loadProgress, nextStatus, saveProgress } from "./utils/progressStore";
 import {
+  buildWatchPartyShareUrl,
+  createWatchParty,
+  fetchWatchPartyProgress,
+  joinWatchParty,
+  leaveWatchParty,
+  loadActiveCollabSession,
+  replaceWatchPartyProgress,
+  saveActiveCollabSession,
+  updateWatchPartyItem,
+} from "./utils/collabSession";
+import {
   supabase,
   isSupabaseConfigured,
   fetchWatchlistProgress,
@@ -90,7 +101,6 @@ const slugify = (value) =>
     .replace(/^-|-$/g, "");
 const getLocalPosterUrl = (title) => `/posters/${slugify(title)}.jpg`;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
-const BUILD_ID = import.meta.env.VITE_BUILD_ID || import.meta.env.VITE_GIT_COMMIT || "dev-local";
 const getWatchNowUrl = (title, type) => {
   const normalized = type === "film" ? normalizeFilmTitle(title) : normalizeShowTitle(title);
   const slug = slugify(normalized);
@@ -133,8 +143,9 @@ const RELEASE_DATES = {
     "The Marvels": "Nov 10, 2023",
     "Deadpool & Wolverine": "Jul 26, 2024",
     "Captain America: Brave New World": "Feb 14, 2025",
-    "Thunderbolts*": "May 2, 2025",
+    Thunderbolts: "May 2, 2025",
     "Fantastic Four: First Steps": "Jul 25, 2025",
+    "Black Widow": "Jul 9, 2021",
   },
   shows: {
     WandaVision: "Jan 15, 2021",
@@ -281,6 +292,18 @@ export function App() {
   const [accountSettingsMessage, setAccountSettingsMessage] = useState("");
   const [accountSettingsError, setAccountSettingsError] = useState("");
   const [accountSettingsSubmitting, setAccountSettingsSubmitting] = useState(false);
+  const [activeCollabSession, setActiveCollabSession] = useState(() => loadActiveCollabSession());
+  const [collabJoinCodeInput, setCollabJoinCodeInput] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+    return new URLSearchParams(window.location.search).get("join")?.toUpperCase() || "";
+  });
+  const [collabPartyNameInput, setCollabPartyNameInput] = useState("MCU Watch Party");
+  const [collabMessage, setCollabMessage] = useState("");
+  const [collabError, setCollabError] = useState("");
+  const [collabSubmitting, setCollabSubmitting] = useState(false);
+  const [showWatchParty, setShowWatchParty] = useState(false);
   const [posterMap, setPosterMap] = useState({});
   const [quizOpen, setQuizOpen] = useState(false);
   const [isDraggingWidget, setIsDraggingWidget] = useState(false);
@@ -335,6 +358,22 @@ export function App() {
     () => Boolean(authToken) && String(currentUser || "").toUpperCase() === ADMIN_USERNAME,
     [authToken, currentUser]
   );
+  const canUseWatchParty = Boolean(authToken);
+
+  const hydrateCollabProgress = async (session) => {
+    const payload = await fetchWatchPartyProgress(API_BASE_URL, authHeaders, session.sessionId);
+    setProgress(payload.progress || {});
+    setActiveCollabSession({
+      sessionId: payload.sessionId || session.sessionId,
+      joinCode: payload.joinCode || session.joinCode,
+      name: payload.name || session.name,
+    });
+    saveActiveCollabSession({
+      sessionId: payload.sessionId || session.sessionId,
+      joinCode: payload.joinCode || session.joinCode,
+      name: payload.name || session.name,
+    });
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -373,6 +412,17 @@ export function App() {
         }
         const profile = await profileResponse.json();
         setCurrentUser(profile.username || "");
+
+        const storedCollab = loadActiveCollabSession();
+        if (storedCollab) {
+          try {
+            await hydrateCollabProgress(storedCollab);
+            return;
+          } catch (_collabError) {
+            saveActiveCollabSession(null);
+            setActiveCollabSession(null);
+          }
+        }
 
         const progressResponse = await fetch(`${API_BASE_URL}/api/progress/me`, {
           headers: authHeaders,
@@ -453,6 +503,26 @@ export function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!authToken || !activeCollabSession) {
+      return undefined;
+    }
+    const refreshCollabProgress = async () => {
+      try {
+        const payload = await fetchWatchPartyProgress(
+          API_BASE_URL,
+          authHeaders,
+          activeCollabSession.sessionId
+        );
+        setProgress(payload.progress || {});
+      } catch (_error) {
+        // Keep optimistic UI on transient refresh failures.
+      }
+    };
+    const timer = window.setInterval(refreshCollabProgress, 30000);
+    return () => window.clearInterval(timer);
+  }, [API_BASE_URL, activeCollabSession, authHeaders, authToken]);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
@@ -759,8 +829,31 @@ export function App() {
     };
   }, [progress]);
 
-  const persistProgress = async (nextProgress) => {
+  const persistProgress = async (nextProgress, changedItemId = null) => {
     setProgress(nextProgress);
+    if (activeCollabSession && authToken) {
+      try {
+        if (changedItemId) {
+          await updateWatchPartyItem(
+            API_BASE_URL,
+            authHeaders,
+            activeCollabSession.sessionId,
+            changedItemId,
+            nextProgress[changedItemId]
+          );
+        } else {
+          await replaceWatchPartyProgress(
+            API_BASE_URL,
+            authHeaders,
+            activeCollabSession.sessionId,
+            nextProgress
+          );
+        }
+      } catch (_error) {
+        // Keep optimistic UI state even if network call fails.
+      }
+      return;
+    }
     if (supabaseUser && supabase) {
       try {
         await upsertWatchlistProgress(supabase, supabaseUser.id, nextProgress);
@@ -1007,7 +1100,128 @@ export function App() {
   const updateItemStatus = (itemId) => {
     const next = nextStatus(progress[itemId] || "not_started");
     const nextProgress = { ...progress, [itemId]: next };
-    persistProgress(nextProgress);
+    persistProgress(nextProgress, itemId);
+  };
+
+  const maybeImportLocalProgress = () => {
+    const local = loadProgress();
+    return Object.keys(local).length > 0 ? local : undefined;
+  };
+
+  const handleCreateWatchParty = async (event) => {
+    event?.preventDefault?.();
+    if (!canUseWatchParty) {
+      setCollabError("Sign in with a TVA account or Google to create a watch party.");
+      return;
+    }
+    setCollabSubmitting(true);
+    setCollabError("");
+    setCollabMessage("");
+    try {
+      const shouldImport =
+        typeof window !== "undefined" &&
+        window.confirm("Import your current progress into this shared watch party?");
+      const payload = await createWatchParty(API_BASE_URL, authHeaders, {
+        name: collabPartyNameInput,
+        progress: shouldImport ? maybeImportLocalProgress() || progress : undefined,
+      });
+      const session = {
+        sessionId: payload.sessionId,
+        joinCode: payload.joinCode,
+        name: payload.name,
+      };
+      saveActiveCollabSession(session);
+      setActiveCollabSession(session);
+      await hydrateCollabProgress(session);
+      setCollabMessage(`Watch party created. Share code ${payload.joinCode} with friends.`);
+    } catch (error) {
+      setCollabError(error.message || "Could not create watch party.");
+    } finally {
+      setCollabSubmitting(false);
+    }
+  };
+
+  const handleJoinWatchParty = async (event) => {
+    event?.preventDefault?.();
+    if (!canUseWatchParty) {
+      setCollabError("Sign in with a TVA account or Google to join a watch party.");
+      setShowLoginScreen(true);
+      return;
+    }
+    const joinCode = collabJoinCodeInput.trim().toUpperCase();
+    if (!USERNAME_PATTERN.test(joinCode)) {
+      setCollabError("Join code must be exactly 6 letters or numbers.");
+      return;
+    }
+    setCollabSubmitting(true);
+    setCollabError("");
+    setCollabMessage("");
+    try {
+      const shouldImport =
+        typeof window !== "undefined" &&
+        window.confirm("Import your current progress into this shared watch party?");
+      const payload = await joinWatchParty(API_BASE_URL, authHeaders, {
+        joinCode,
+        progress: shouldImport ? maybeImportLocalProgress() || progress : undefined,
+      });
+      const session = {
+        sessionId: payload.sessionId,
+        joinCode: payload.joinCode,
+        name: payload.name,
+      };
+      saveActiveCollabSession(session);
+      setActiveCollabSession(session);
+      await hydrateCollabProgress(session);
+      setCollabMessage(`Joined watch party "${payload.name}".`);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("join");
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch (error) {
+      setCollabError(error.message || "Could not join watch party.");
+    } finally {
+      setCollabSubmitting(false);
+    }
+  };
+
+  const handleLeaveWatchParty = async () => {
+    if (!activeCollabSession || !authToken) {
+      return;
+    }
+    setCollabSubmitting(true);
+    setCollabError("");
+    setCollabMessage("");
+    try {
+      await leaveWatchParty(API_BASE_URL, authHeaders, activeCollabSession.sessionId);
+      saveActiveCollabSession(null);
+      setActiveCollabSession(null);
+      const progressResponse = await fetch(`${API_BASE_URL}/api/progress/me`, {
+        headers: authHeaders,
+      });
+      if (progressResponse.ok) {
+        const payload = await progressResponse.json();
+        setProgress(payload.progress || {});
+      }
+      setCollabMessage("Left shared watch party. Showing your personal progress again.");
+    } catch (error) {
+      setCollabError(error.message || "Could not leave watch party.");
+    } finally {
+      setCollabSubmitting(false);
+    }
+  };
+
+  const handleCopyWatchPartyLink = async () => {
+    if (!activeCollabSession?.joinCode) {
+      return;
+    }
+    const shareUrl = buildWatchPartyShareUrl(activeCollabSession.joinCode);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCollabMessage("Share link copied to clipboard.");
+    } catch (_error) {
+      setCollabMessage(shareUrl);
+    }
   };
 
   const toggleWeek = (weekId) => {
@@ -1152,10 +1366,9 @@ export function App() {
 
   if (showIntroLoader) {
     return (
-      <div className="marvel-loader" role="status" aria-live="polite" aria-label="Loading MCU Watchlist">
+      <div className="marvel-loader" role="status" aria-live="polite" aria-label="Loading Sacred Timeline">
         <div className="marvel-loader-frame">
-          <p className="marvel-loader-tag">EARTH-616 Initializing</p>
-          <h1 className="marvel-loader-title">INFINITY BOOTSEQUENCE</h1>
+          <h1 className="marvel-loader-title">Sacred Timeline</h1>
           <div className="marvel-loader-bar">
             <span />
           </div>
@@ -1174,8 +1387,8 @@ export function App() {
         <div className="app-layout">
           <main className="container auth-container">
             <section className="auth-card">
-              <h1>MCU WATCHLIST</h1>
-              <p>Restoring your session...</p>
+              <h1>Sacred Timeline</h1>
+              <p>Loading...</p>
             </section>
           </main>
         </div>
@@ -1198,10 +1411,8 @@ export function App() {
                 ← Back to watchlist (guest session)
               </button>
             ) : null}
-            <h1>MCU WATCHLIST</h1>
-            <p>
-              TVA Access Console. Create or use a 6-character username and 6-digit PassKey.
-            </p>
+            <h1>Sacred Timeline</h1>
+            <p>Sign in with a 6-character username and 6-digit PassKey.</p>
             <form onSubmit={submitCredentialsAuth} className="auth-credentials-form">
               <label htmlFor="auth-username">
                 Username (6 alphanumeric)
@@ -1229,7 +1440,7 @@ export function App() {
                 />
               </label>
               <button type="submit" disabled={authSubmitting}>
-                {authSubmitting ? "Authorizing..." : authMode === "register" ? "Create TVA Account" : "Enter TVA"}
+                {authSubmitting ? "Signing in..." : authMode === "register" ? "Create account" : "Sign in"}
               </button>
             </form>
             <button
@@ -1240,7 +1451,7 @@ export function App() {
                 setAuthError("");
               }}
             >
-              {authMode === "register" ? "Already have TVA access? Sign in" : "Need access? Create account"}
+              {authMode === "register" ? "Already have an account? Sign in" : "Need an account? Create one"}
             </button>
             <p className="auth-divider">or</p>
             {isSupabaseConfigured ? (
@@ -1293,30 +1504,16 @@ export function App() {
       <main className="container">
       <header className="header hero">
         <div>
-          <h1>MCU WATCHLIST</h1>
+          <h1>Sacred Timeline</h1>
           <p>
-            {isGuestBrowse ? (
-              <>
-                <strong>Guest session</strong> — progress is saved for this browser tab only (session storage).
-                Close the tab or browser and it resets unless you sign in.
-              </>
-            ) : (
-              <>
-                Signed in as @{currentUser}.
-              </>
-            )}
-            {supabaseUser
-              ? " Progress is saved to your account (email)."
-              : authToken
-                ? " Progress syncs to leaderboard."
-                : isGuestBrowse
-                  ? " Use Sign in in the header when login is working again."
-                  : ""}
+            {activeCollabSession
+              ? `Watch party: ${activeCollabSession.name} (${activeCollabSession.joinCode})`
+              : isGuestBrowse
+                ? "Browsing as guest — sign in to save progress."
+                : `Signed in as @${currentUser}`}
           </p>
-          <p className="build-badge">TVA Build: {BUILD_ID}</p>
           {isGuestBrowse && isSupabaseConfigured ? (
             <div className="header-magic-wrap">
-              <p className="header-magic-hint">Optional: save progress with a free email magic link.</p>
               <form onSubmit={sendMagicLink} className="header-magic-form">
                 <input
                   type="email"
@@ -1344,6 +1541,11 @@ export function App() {
               {showAccountSettings ? "Close Account Settings" : "Change Username / PassKey"}
             </button>
           ) : null}
+          {canUseWatchParty ? (
+            <button type="button" onClick={() => setShowWatchParty((prev) => !prev)}>
+              {showWatchParty ? "Hide watch party" : "Watch party"}
+            </button>
+          ) : null}
           {isAuthenticatedUser ? (
             <button onClick={logout}>Logout</button>
           ) : (
@@ -1359,6 +1561,69 @@ export function App() {
           )}
         </div>
       </header>
+      {showWatchParty && canUseWatchParty ? (
+      <section className="watch-party-panel">
+        <div className="watch-party-header">
+          <h3>Watch Party</h3>
+        </div>
+        {activeCollabSession ? (
+          <div className="watch-party-active">
+            <p>
+              Active party: <strong>{activeCollabSession.name}</strong> · Join code{" "}
+              <strong>{activeCollabSession.joinCode}</strong>
+            </p>
+            <div className="watch-party-actions">
+              <button type="button" onClick={handleCopyWatchPartyLink}>
+                Copy share link
+              </button>
+              <button type="button" onClick={handleLeaveWatchParty} disabled={collabSubmitting}>
+                {collabSubmitting ? "Leaving..." : "Leave watch party"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="watch-party-forms">
+            <form onSubmit={handleCreateWatchParty} className="watch-party-form">
+              <label htmlFor="watch-party-name">
+                Party name
+                <input
+                  id="watch-party-name"
+                  type="text"
+                  maxLength={80}
+                  value={collabPartyNameInput}
+                  onChange={(e) => setCollabPartyNameInput(e.target.value)}
+                  placeholder="MCU Watch Party"
+                />
+              </label>
+              <button type="submit" disabled={collabSubmitting || !canUseWatchParty}>
+                {collabSubmitting ? "Creating..." : "Create watch party"}
+              </button>
+            </form>
+            <form onSubmit={handleJoinWatchParty} className="watch-party-form">
+              <label htmlFor="watch-party-join-code">
+                Join code (6 characters)
+                <input
+                  id="watch-party-join-code"
+                  type="text"
+                  maxLength={6}
+                  value={collabJoinCodeInput}
+                  onChange={(e) =>
+                    setCollabJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                  }
+                  placeholder="ABC123"
+                />
+              </label>
+              <button type="submit" disabled={collabSubmitting || !canUseWatchParty}>
+                {collabSubmitting ? "Joining..." : "Join watch party"}
+              </button>
+            </form>
+          </div>
+        )}
+        {collabMessage ? <p className="auth-success">{collabMessage}</p> : null}
+        {collabError ? <p className="auth-error">{collabError}</p> : null}
+      </section>
+      ) : null}
+
       {showAccountSettings && authToken ? (
         <section className="account-settings">
           <h3>Account Settings</h3>
@@ -1501,7 +1766,7 @@ export function App() {
 
       {isAdmin ? (
         <section className="admin-panel">
-          <h3>TVA Admin Console</h3>
+          <h3>Admin</h3>
           <p>Create users.</p>
           {adminMessage ? <p className="auth-success">{adminMessage}</p> : null}
           {adminError ? <p className="auth-error">{adminError}</p> : null}
@@ -1548,13 +1813,12 @@ export function App() {
             </button>
             {(expandedArcs[arc.id] ?? !isMobileView) && (
               <>
-                <p className="arc-note">{arc.note}</p>
+                {arc.note ? <p className="arc-note">{arc.note}</p> : null}
                 {arc.weeks.map((week, weekIdx) => {
                   const prevTimelineName = weekIdx > 0 ? arc.weeks[weekIdx - 1].timelineName : null;
                   const timelineChanged =
                     Boolean(week.timelineName) && week.timelineName !== prevTimelineName;
-                  const mergedEndgameSaga =
-                    typeof arc.name === "string" && arc.name.toLowerCase().includes("mcu rewatch");
+                  const mergedEndgameSaga = arc.weeks.some((entry) => Boolean(entry.timelineName));
                   const showTimelineBanner = timelineChanged && !mergedEndgameSaga;
                   const isOpen = expandedWeeks[week.id] ?? !isMobileView;
                   const completedCount = week.items.filter(
@@ -1627,8 +1891,10 @@ export function App() {
                                       </span>
                                     ) : null}
                                   </strong>
-                                  <p>{item.duration} · {item.type}</p>
-                                  <p>Release: {getReleaseDateLabel(item)}</p>
+                                  <p>
+                                    {item.duration} · {item.type === "film" ? "Film" : "Show"} ·{" "}
+                                    {getReleaseDateLabel(item)}
+                                  </p>
                                   <p className="watch-links">
                                     <a
                                       href={getWatchNowUrl(item.title, item.type)}

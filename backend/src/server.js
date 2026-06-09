@@ -55,6 +55,150 @@ const sanitizeProgress = (progress) => {
   return output;
 };
 
+const JOIN_CODE_PATTERN = /^[A-Z0-9]{6}$/;
+
+const generateJoinCode = () => {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i += 1) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return code;
+};
+
+const generateUniqueJoinCode = async () => {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const joinCode = generateJoinCode();
+    const { data, error } = await supabase
+      .from("collab_sessions")
+      .select("id")
+      .eq("join_code", joinCode)
+      .maybeSingle();
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      return joinCode;
+    }
+  }
+};
+
+const readCollabSession = async (sessionId) => {
+  const { data, error } = await supabase
+    .from("collab_sessions")
+    .select("id,name,join_code,created_by,created_at,updated_at")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data;
+};
+
+const readCollabSessionByJoinCode = async (joinCode) => {
+  const { data, error } = await supabase
+    .from("collab_sessions")
+    .select("id,name,join_code,created_by,created_at,updated_at")
+    .eq("join_code", joinCode)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data;
+};
+
+const isCollabMember = async (sessionId, userId) => {
+  const { data, error } = await supabase
+    .from("collab_members")
+    .select("session_id")
+    .eq("session_id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return Boolean(data);
+};
+
+const addCollabMember = async (sessionId, userId) => {
+  const { error } = await supabase.from("collab_members").upsert(
+    {
+      session_id: sessionId,
+      user_id: userId,
+      joined_at: new Date().toISOString(),
+    },
+    { onConflict: "session_id,user_id" }
+  );
+  if (error) {
+    throw error;
+  }
+};
+
+const bulkUpsertCollabProgress = async (sessionId, progress, userId) => {
+  const sanitized = sanitizeProgress(progress);
+  const entries = Object.entries(sanitized);
+  if (entries.length === 0) {
+    return;
+  }
+  const now = new Date().toISOString();
+  const rows = entries.map(([itemId, status]) => ({
+    session_id: sessionId,
+    item_id: itemId,
+    status,
+    updated_at: now,
+    updated_by: userId,
+  }));
+  const { error } = await supabase.from("collab_item_progress").upsert(rows, {
+    onConflict: "session_id,item_id",
+  });
+  if (error) {
+    throw error;
+  }
+  await supabase.from("collab_sessions").update({ updated_at: now }).eq("id", sessionId);
+};
+
+const readCollabProgress = async (sessionId) => {
+  const { data, error } = await supabase
+    .from("collab_item_progress")
+    .select("item_id,status,updated_at,updated_by,custom_users(username)")
+    .eq("session_id", sessionId);
+  if (error) {
+    throw error;
+  }
+  const progress = {};
+  const meta = {};
+  (data || []).forEach((row) => {
+    progress[row.item_id] = row.status;
+    meta[row.item_id] = {
+      updatedAt: row.updated_at,
+      updatedBy: row.custom_users?.username || null,
+    };
+  });
+  return { progress, meta };
+};
+
+const requireCollabMember = async (req, res, next) => {
+  try {
+    const sessionId = String(req.params.id || "");
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session id is required." });
+    }
+    const session = await readCollabSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Watch party not found." });
+    }
+    const member = await isCollabMember(sessionId, req.auth.userId);
+    if (!member) {
+      return res.status(403).json({ error: "You are not a member of this watch party." });
+    }
+    req.collabSession = session;
+    return next();
+  } catch (_error) {
+    return res.status(500).json({ error: "Unable to verify watch party membership." });
+  }
+};
+
 const ensureSupabaseConfigured = () => {
   if (!supabase) {
     throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
@@ -520,6 +664,204 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
     return res.json({ ok: true, username: createdUser.username });
   } catch (_error) {
     return res.status(500).json({ error: "Could not create user." });
+  }
+});
+
+app.post("/api/session", requireAuth, async (req, res) => {
+  try {
+    const name = String(req.body?.name || "MCU Watch Party").trim().slice(0, 80) || "MCU Watch Party";
+    const joinCode = await generateUniqueJoinCode();
+    const { data: session, error } = await supabase
+      .from("collab_sessions")
+      .insert({
+        name,
+        join_code: joinCode,
+        created_by: req.auth.userId,
+      })
+      .select("id,name,join_code,created_at")
+      .single();
+    if (error) {
+      throw error;
+    }
+    await addCollabMember(session.id, req.auth.userId);
+    const importProgress = sanitizeProgress(req.body?.progress);
+    if (Object.keys(importProgress).length > 0) {
+      await bulkUpsertCollabProgress(session.id, importProgress, req.auth.userId);
+    }
+    return res.json({
+      sessionId: session.id,
+      joinCode: session.join_code,
+      name: session.name,
+      createdAt: session.created_at,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not create watch party." });
+  }
+});
+
+app.get("/api/session/mine", requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("collab_members")
+      .select("joined_at,collab_sessions(id,name,join_code,created_at,updated_at)")
+      .eq("user_id", req.auth.userId)
+      .order("joined_at", { ascending: false });
+    if (error) {
+      throw error;
+    }
+    const sessions = (data || [])
+      .map((entry) => entry.collab_sessions)
+      .filter(Boolean)
+      .map((session) => ({
+        sessionId: session.id,
+        joinCode: session.join_code,
+        name: session.name,
+        createdAt: session.created_at,
+        updatedAt: session.updated_at,
+      }));
+    return res.json({ sessions });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not load watch parties." });
+  }
+});
+
+app.post("/api/session/join", requireAuth, async (req, res) => {
+  try {
+    const joinCode = String(req.body?.joinCode || "").trim().toUpperCase();
+    if (!JOIN_CODE_PATTERN.test(joinCode)) {
+      return res.status(400).json({ error: "Join code must be exactly 6 letters or numbers." });
+    }
+    const session = await readCollabSessionByJoinCode(joinCode);
+    if (!session) {
+      return res.status(404).json({ error: "Watch party not found. Check the join code." });
+    }
+    await addCollabMember(session.id, req.auth.userId);
+    const importProgress = sanitizeProgress(req.body?.progress);
+    if (Object.keys(importProgress).length > 0) {
+      await bulkUpsertCollabProgress(session.id, importProgress, req.auth.userId);
+    }
+    return res.json({
+      sessionId: session.id,
+      joinCode: session.join_code,
+      name: session.name,
+      createdAt: session.created_at,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not join watch party." });
+  }
+});
+
+app.post("/api/session/:id/join", requireAuth, async (req, res) => {
+  try {
+    const sessionId = String(req.params.id || "");
+    const joinCode = String(req.body?.joinCode || "").trim().toUpperCase();
+    if (!JOIN_CODE_PATTERN.test(joinCode)) {
+      return res.status(400).json({ error: "Join code must be exactly 6 letters or numbers." });
+    }
+    const session = await readCollabSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Watch party not found." });
+    }
+    if (session.join_code !== joinCode) {
+      return res.status(403).json({ error: "Join code does not match this watch party." });
+    }
+    await addCollabMember(session.id, req.auth.userId);
+    const importProgress = sanitizeProgress(req.body?.progress);
+    if (Object.keys(importProgress).length > 0) {
+      await bulkUpsertCollabProgress(session.id, importProgress, req.auth.userId);
+    }
+    return res.json({
+      sessionId: session.id,
+      joinCode: session.join_code,
+      name: session.name,
+      createdAt: session.created_at,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not join watch party." });
+  }
+});
+
+app.get("/api/session/:id/progress", requireAuth, requireCollabMember, async (req, res) => {
+  try {
+    const payload = await readCollabProgress(req.collabSession.id);
+    return res.json({
+      sessionId: req.collabSession.id,
+      name: req.collabSession.name,
+      joinCode: req.collabSession.join_code,
+      ...payload,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: "Unable to load watch party progress." });
+  }
+});
+
+app.put("/api/session/:id/progress", requireAuth, requireCollabMember, async (req, res) => {
+  try {
+    const sessionId = req.collabSession.id;
+    const incomingProgress = sanitizeProgress(req.body?.progress);
+    const { error: deleteError } = await supabase
+      .from("collab_item_progress")
+      .delete()
+      .eq("session_id", sessionId);
+    if (deleteError) {
+      throw deleteError;
+    }
+    await bulkUpsertCollabProgress(sessionId, incomingProgress, req.auth.userId);
+    return res.json({ ok: true, updatedAt: new Date().toISOString() });
+  } catch (_error) {
+    return res.status(500).json({ error: "Unable to save watch party progress." });
+  }
+});
+
+app.patch("/api/session/:id/progress/:itemId", requireAuth, requireCollabMember, async (req, res) => {
+  try {
+    const itemId = String(req.params.itemId || "");
+    const status = String(req.body?.status || "");
+    const allowed = new Set(PROGRESS_SCHEMA.statuses);
+    if (!itemId || !allowed.has(status)) {
+      return res.status(400).json({ error: "Valid itemId and status are required." });
+    }
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("collab_item_progress").upsert(
+      {
+        session_id: req.collabSession.id,
+        item_id: itemId,
+        status,
+        updated_at: now,
+        updated_by: req.auth.userId,
+      },
+      { onConflict: "session_id,item_id" }
+    );
+    if (error) {
+      throw error;
+    }
+    await supabase.from("collab_sessions").update({ updated_at: now }).eq("id", req.collabSession.id);
+    return res.json({
+      ok: true,
+      itemId,
+      status,
+      updatedAt: now,
+      updatedBy: req.auth.username,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: "Unable to update watch party item." });
+  }
+});
+
+app.post("/api/session/:id/leave", requireAuth, async (req, res) => {
+  try {
+    const sessionId = String(req.params.id || "");
+    const { error } = await supabase
+      .from("collab_members")
+      .delete()
+      .eq("session_id", sessionId)
+      .eq("user_id", req.auth.userId);
+    if (error) {
+      throw error;
+    }
+    return res.json({ ok: true });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not leave watch party." });
   }
 });
 
