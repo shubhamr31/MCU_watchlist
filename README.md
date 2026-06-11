@@ -7,6 +7,7 @@ React + Express app for tracking MCU rewatch progress with Google login and shar
 - Arc-based MCU schedule loaded from your source HTML.
 - Film/show filtering and title search.
 - Three-state progress per item: `Not started`, `Watching`, `Completed`.
+- Guest progress persists on the device (`localStorage`); signed-in progress is stored permanently in Supabase per account.
 - Google sign-in for shared account access.
 - Shared leaderboard that compares multi-user progress.
 - Backend scaffold with `/health` and `/api/schema`.
@@ -17,19 +18,18 @@ React + Express app for tracking MCU rewatch progress with Google login and shar
 - `backend`: Express API scaffold.
 - `shared/contracts.js`: shared schema and future collaboration model contracts.
 
-## V2 collaboration path (planned)
+## Phase 2 — shared watch parties (V2)
 
-V1 is local-only. To enable friend collaboration through share links in V2:
+Signed-in users can create or join a **watch party** with a 6-character code or share link (`?join=ABC123`).
 
-1. Create a `ShareSession` record with `sessionId` and join code.
-2. Store canonical progress in backend DB keyed by `sessionId + itemId`.
-3. Add endpoints:
-   - `POST /api/session`
-   - `POST /api/session/:id/join`
-   - `GET /api/session/:id/progress`
-   - `PATCH /api/session/:id/progress/:itemId`
-4. Migrate local progress by prompting user to import local state into a selected session.
-5. Add conflict policy based on `updatedAt` (last-write-wins for V2 baseline).
+- Shared progress is stored in Supabase (`collab_sessions`, `collab_members`, `collab_item_progress`).
+- One canonical timeline per party; per-item updates use last-write-wins.
+- UI: header **Watch party** panel — create, join, member list, party switcher, invite link.
+- Optional checkbox to import personal/guest progress when creating or joining.
+
+**Setup:** run `supabase/migrations/003_collab_sessions.sql` (or `setup_all.sql`), then redeploy the backend so `/api/session/*` routes are live.
+
+**API routes:** `POST /api/session`, `GET /api/session/mine`, `POST /api/session/join`, `GET /api/session/:id/progress`, `PATCH /api/session/:id/progress/:itemId`, `GET /api/session/:id/members`, `POST /api/session/:id/leave`.
 
 ## Run notes
 

@@ -848,6 +848,62 @@ app.patch("/api/session/:id/progress/:itemId", requireAuth, requireCollabMember,
   }
 });
 
+app.get("/api/session/:id/members", requireAuth, requireCollabMember, async (req, res) => {
+  try {
+    const sessionId = req.collabSession.id;
+    const { data: members, error: membersError } = await supabase
+      .from("collab_members")
+      .select("joined_at,custom_users(id,username)")
+      .eq("session_id", sessionId)
+      .order("joined_at", { ascending: true });
+    if (membersError) {
+      throw membersError;
+    }
+    const { data: progressRows, error: progressError } = await supabase
+      .from("collab_item_progress")
+      .select("updated_by,status")
+      .eq("session_id", sessionId);
+    if (progressError) {
+      throw progressError;
+    }
+    const contributionCounts = {};
+    const completedCounts = {};
+    (progressRows || []).forEach((row) => {
+      if (!row.updated_by) {
+        return;
+      }
+      contributionCounts[row.updated_by] = (contributionCounts[row.updated_by] || 0) + 1;
+      if (row.status === "completed") {
+        completedCounts[row.updated_by] = (completedCounts[row.updated_by] || 0) + 1;
+      }
+    });
+    const memberList = (members || [])
+      .map((entry) => {
+        const userId = entry.custom_users?.id;
+        const username = entry.custom_users?.username;
+        if (!userId || !username) {
+          return null;
+        }
+        return {
+          username,
+          joinedAt: entry.joined_at,
+          updates: contributionCounts[userId] || 0,
+          completedMarked: completedCounts[userId] || 0,
+        };
+      })
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          b.completedMarked - a.completedMarked ||
+          b.updates - a.updates ||
+          a.username.localeCompare(b.username)
+      );
+    return res.json({ members: memberList });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not load watch party members." });
+  }
+});
+
 app.post("/api/session/:id/leave", requireAuth, async (req, res) => {
   try {
     const sessionId = String(req.params.id || "");

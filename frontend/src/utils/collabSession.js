@@ -131,6 +131,28 @@ export const leaveWatchParty = async (apiBaseUrl, authHeaders, sessionId) => {
   return response.json();
 };
 
+export const fetchMyWatchParties = async (apiBaseUrl, authHeaders) => {
+  const response = await fetch(`${apiBaseUrl}/api/session/mine`, {
+    headers: authHeaders,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  const payload = await response.json();
+  return payload.sessions || [];
+};
+
+export const fetchWatchPartyMembers = async (apiBaseUrl, authHeaders, sessionId) => {
+  const response = await fetch(`${apiBaseUrl}/api/session/${sessionId}/members`, {
+    headers: authHeaders,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  const payload = await response.json();
+  return payload.members || [];
+};
+
 export const buildWatchPartyShareUrl = (joinCode) => {
   if (typeof window === "undefined") {
     return "";

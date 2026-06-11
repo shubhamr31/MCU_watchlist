@@ -2,25 +2,24 @@ const STORAGE_KEY = "mcu-watchlist-progress-v1";
 const LEGACY_STORAGE_KEY = "mcu-watchlist-progress-v1";
 const SCHEMA_VERSION = 1;
 
-// Guest progress is stored in sessionStorage so it lives only for the
-// current browser session. Per-account cloud sync still uses the backend.
+// Guest and signed-out progress persists in localStorage on this device.
 const getStorage = () => {
   if (typeof window === "undefined") {
     return null;
   }
   try {
-    return window.sessionStorage;
+    return window.localStorage;
   } catch (_error) {
     return null;
   }
 };
 
-const getLegacyStorage = () => {
+const getLegacySessionStorage = () => {
   if (typeof window === "undefined") {
     return null;
   }
   try {
-    return window.localStorage;
+    return window.sessionStorage;
   } catch (_error) {
     return null;
   }
@@ -51,23 +50,42 @@ const parsePayload = (raw) => {
   }
 };
 
+const STATUS_RANK = {
+  not_started: 0,
+  watching: 1,
+  completed: 2,
+};
+
+export const mergeProgress = (local, remote) => {
+  const merged = { ...(remote || {}) };
+  Object.entries(local || {}).forEach(([itemId, status]) => {
+    if (!STATUSES.includes(status)) {
+      return;
+    }
+    const remoteStatus = merged[itemId] || "not_started";
+    if ((STATUS_RANK[status] ?? 0) > (STATUS_RANK[remoteStatus] ?? 0)) {
+      merged[itemId] = status;
+    }
+  });
+  return merged;
+};
+
 export const loadProgress = () => {
   const storage = getStorage();
   if (!storage) {
     return {};
   }
-  const fromSession = parsePayload(storage.getItem(STORAGE_KEY));
-  if (fromSession) {
-    return fromSession;
+  const fromLocal = parsePayload(storage.getItem(STORAGE_KEY));
+  if (fromLocal) {
+    return fromLocal;
   }
-  // One-time migration: pull legacy localStorage progress into the
-  // current browser session so existing users don't lose state on first load.
-  const legacy = getLegacyStorage();
-  if (legacy) {
-    const fromLocal = parsePayload(legacy.getItem(LEGACY_STORAGE_KEY));
-    if (fromLocal) {
-      saveProgress(fromLocal);
-      return fromLocal;
+  // One-time migration from older sessionStorage-only builds.
+  const legacySession = getLegacySessionStorage();
+  if (legacySession) {
+    const fromSession = parsePayload(legacySession.getItem(LEGACY_STORAGE_KEY));
+    if (fromSession) {
+      saveProgress(fromSession);
+      return fromSession;
     }
   }
   return {};
