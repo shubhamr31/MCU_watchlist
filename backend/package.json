@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "check:collab-schema": "node scripts/check-collab-schema.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

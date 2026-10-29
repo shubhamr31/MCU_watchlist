@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { createClient } from "@supabase/supabase-js";
 import { PROGRESS_SCHEMA, V2_COLLAB_SHAPES } from "../../shared/contracts.js";
@@ -19,10 +19,59 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
     : null;
 
-const hashPassword = (password, salt) =>
+const SCRYPT_PREFIX = "scrypt$";
+
+const legacyHashPassword = (password, salt) =>
   createHash("sha256")
     .update(`${salt}:${password}`)
     .digest("hex");
+
+// New hashes use scrypt (slow, memory-hard). Legacy SHA-256 hashes are still verified
+// and upgraded transparently on the next successful login.
+const hashPassword = (password, salt) =>
+  `${SCRYPT_PREFIX}${scryptSync(String(password), String(salt), 64).toString("hex")}`;
+
+const verifyPassword = (password, user) => {
+  const stored = String(user?.password_hash || "");
+  if (!stored || !user?.password_salt) {
+    return false;
+  }
+  const expected = stored.startsWith(SCRYPT_PREFIX)
+    ? hashPassword(password, user.password_salt)
+    : legacyHashPassword(password, user.password_salt);
+  const a = Buffer.from(expected);
+  const b = Buffer.from(stored);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const isLegacyHash = (user) => !String(user?.password_hash || "").startsWith(SCRYPT_PREFIX);
+
+// Simple in-memory rate limiter (per IP + route) for auth endpoints.
+const rateBuckets = new Map();
+const rateLimit = ({ windowMs, max }) => (req, res, next) => {
+  const key = `${req.ip}:${req.path}`;
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return next();
+  }
+  bucket.count += 1;
+  if (bucket.count > max) {
+    res.set("Retry-After", String(Math.ceil((bucket.resetAt - now) / 1000)));
+    return res.status(429).json({ error: "Too many attempts. Please try again later." });
+  }
+  return next();
+};
+setInterval(() => {
+  const now = Date.now();
+  rateBuckets.forEach((bucket, key) => {
+    if (bucket.resetAt <= now) {
+      rateBuckets.delete(key);
+    }
+  });
+}, 60 * 1000).unref();
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 
 const safeUsername = (value) => String(value || "").trim().toUpperCase();
 const safePassword = (value) => String(value || "");
@@ -257,6 +306,7 @@ const touchSession = async (token) => {
 };
 
 app.use(cors());
+app.set("trust proxy", 1);
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
@@ -270,7 +320,7 @@ app.get("/api/schema", (_req, res) => {
   });
 });
 
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const username = safeUsername(req.body?.username);
     const password = safePassword(req.body?.password);
@@ -322,7 +372,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const username = safeUsername(req.body?.username);
     const password = safePassword(req.body?.password);
@@ -333,9 +383,23 @@ app.post("/api/auth/login", async (req, res) => {
     if (!user || !hasCredentialPassword(user)) {
       return res.status(401).json({ error: "Invalid username or PassKey." });
     }
-    const incomingHash = hashPassword(password, user.password_salt);
-    if (incomingHash !== user.password_hash) {
+    if (!verifyPassword(password, user)) {
       return res.status(401).json({ error: "Invalid username or PassKey." });
+    }
+    if (isLegacyHash(user)) {
+      try {
+        const upgradedSalt = randomBytes(16).toString("hex");
+        await supabase
+          .from("custom_users")
+          .update({
+            password_salt: upgradedSalt,
+            password_hash: hashPassword(password, upgradedSalt),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id);
+      } catch (_upgradeError) {
+        // Non-fatal: login still succeeds with the legacy hash.
+      }
     }
     const token = await createSession(user.id);
     return res.json({ token, username: user.username });
@@ -506,7 +570,7 @@ app.put("/api/progress/me", requireAuth, async (req, res) => {
   }
 });
 
-app.put("/api/auth/credentials", requireAuth, async (req, res) => {
+app.put("/api/auth/credentials", authLimiter, requireAuth, async (req, res) => {
   try {
     const currentPassKey = safePassword(req.body?.currentPassKey);
     const newUsernameInput = safeUsername(req.body?.newUsername);
@@ -526,8 +590,7 @@ app.put("/api/auth/credentials", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Credential changes are only available for username/PassKey accounts." });
     }
 
-    const incomingHash = hashPassword(currentPassKey, user.password_salt);
-    if (incomingHash !== user.password_hash) {
+    if (!verifyPassword(currentPassKey, user)) {
       return res.status(401).json({ error: "Current PassKey is incorrect." });
     }
 

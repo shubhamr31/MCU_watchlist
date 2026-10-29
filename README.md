@@ -72,6 +72,14 @@ The backend stores user accounts, sessions, and per-user watchlist progress in P
 
    On first request the server will create rows in `custom_users`, `custom_sessions`, and `custom_progress` as users register/log in.
 
+### Username / PassKey login
+
+- Accounts live in `custom_users` (free Supabase Postgres); the backend issues bearer tokens stored in `custom_sessions`.
+- Username: exactly 6 letters/digits. PassKey: exactly 6 digits.
+- PassKeys are hashed with `scrypt` (stored as `scrypt$…`). Older SHA-256 accounts still work and are upgraded automatically on their next login.
+- `register`, `login` and `credentials` routes are rate limited to 10 attempts per IP per 15 minutes (HTTP 429, in-memory, resets on server restart).
+- Deployment checklist: [docs/deploy-watch-parties.md](docs/deploy-watch-parties.md).
+
 ### Tables created
 
 | Table | Purpose |

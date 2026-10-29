@@ -263,6 +263,8 @@ export function App() {
   });
   const [currentUser, setCurrentUser] = useState(GUEST_FIRST_HOME ? "Guest" : "");
   const [authError, setAuthError] = useState("");
+  const [hydrateRetryTick, setHydrateRetryTick] = useState(0);
+  const hydrateRetries = useRef(0);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [authUsername, setAuthUsername] = useState("");
@@ -394,16 +396,24 @@ export function App() {
         const profileResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
           headers: authHeaders,
         });
+        if (profileResponse.status === 401) {
+          throw Object.assign(new Error("Session expired"), { sessionExpired: true });
+        }
         if (!profileResponse.ok) {
-          throw new Error("Session expired");
+          throw new Error("Server error while checking session");
         }
         const profile = await profileResponse.json();
         setCurrentUser(profile.username || "");
+        hydrateRetries.current = 0;
+        setAuthError("");
 
         if (!loadActiveCollabSession()) {
           const progressResponse = await fetch(`${API_BASE_URL}/api/progress/me`, {
             headers: authHeaders,
           });
+          if (progressResponse.status === 401) {
+            throw Object.assign(new Error("Session expired"), { sessionExpired: true });
+          }
           if (!progressResponse.ok) {
             throw new Error("Unable to load progress");
           }
@@ -426,17 +436,25 @@ export function App() {
             });
           }
         }
-      } catch (_error) {
-        setAuthToken("");
-        if (typeof window !== "undefined") {
-          window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      } catch (error) {
+        if (error?.sessionExpired) {
+          // Token really is invalid: sign the user out.
+          setAuthToken("");
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+          }
+        } else if (hydrateRetries.current < 6) {
+          // Network blip or Render cold start: keep the saved login and retry shortly.
+          hydrateRetries.current += 1;
+          setAuthError("Server is waking up. Reconnecting to your account...");
+          window.setTimeout(() => setHydrateRetryTick((tick) => tick + 1), 5000);
         }
       } finally {
         setAuthChecking(false);
       }
     };
     hydrateUser();
-  }, [authHeaders, authToken, supabaseUser, isSupabaseConfigured]);
+  }, [authHeaders, authToken, supabaseUser, isSupabaseConfigured, hydrateRetryTick]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1009,7 +1027,10 @@ export function App() {
     setAuthToken("");
     setSupabaseUser(null);
     setCurrentUser(GUEST_FIRST_HOME ? "Guest" : "");
-    setProgress(GUEST_FIRST_HOME ? loadProgress() : {});
+    // Progress is already saved to the account. Clear the device copy so the next
+    // person who signs in here does not inherit (and merge in) this user's progress.
+    saveProgress({});
+    setProgress({});
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     }
@@ -1075,7 +1096,21 @@ export function App() {
     }
   };
 
+  // Progress can only be changed while signed in; guests are sent to the login screen.
+  const requireSignIn = () => {
+    if (authToken || supabaseUser) {
+      return true;
+    }
+    setAuthMode("login");
+    setAuthError("Sign in to track your progress.");
+    setShowLoginScreen(true);
+    return false;
+  };
+
   const updateItemStatus = (itemId) => {
+    if (!requireSignIn()) {
+      return;
+    }
     const next = nextStatus(progress[itemId] || "not_started");
     const nextProgress = { ...progress, [itemId]: next };
     persistProgress(nextProgress, itemId);
@@ -1097,6 +1132,9 @@ export function App() {
   };
 
   const resetProgress = () => {
+    if (!requireSignIn()) {
+      return;
+    }
     persistProgress({});
   };
 
@@ -1375,7 +1413,7 @@ export function App() {
               : watchParty.pendingUrlJoin
                 ? `Invite code ${watchParty.urlJoinCode} — sign in to join.`
                 : isGuestBrowse
-                  ? "Browsing as guest — progress saved on this device. Sign in to keep it in your account."
+                  ? "Browsing as guest — sign in to track and save your progress."
                   : `Signed in as @${currentUser}`}
           </p>
           {isGuestBrowse && isSupabaseConfigured ? (
@@ -1401,7 +1439,12 @@ export function App() {
           <button onClick={() => setAlertModeEnabled((prev) => !prev)}>
             {alertModeEnabled ? "Switch to Normal Mode" : "Switch to Alert Mode"}
           </button>
-          <button onClick={resetProgress}>Reset Progress</button>
+          <button
+            onClick={resetProgress}
+            title={isAuthenticatedUser ? undefined : "Sign in to track your progress"}
+          >
+            Reset Progress
+          </button>
           {authToken ? (
             <button onClick={() => setShowAccountSettings((prev) => !prev)}>
               {showAccountSettings ? "Close Account Settings" : "Change Username / PassKey"}
@@ -1689,6 +1732,7 @@ export function App() {
                                 key={item.id}
                                 className="item-row item-card"
                                 onClick={() => updateItemStatus(item.id)}
+                                title={isAuthenticatedUser ? undefined : "Sign in to track your progress"}
                               >
                                 <div className="item-main">
                                   <strong>
