@@ -7,6 +7,7 @@ import {
   updateWatchPartyItem,
 } from "./utils/collabSession";
 import { WatchPartyPanel } from "./components/WatchPartyPanel";
+import { TimelineView } from "./components/TimelineView";
 import { useWatchParty } from "./hooks/useWatchParty";
 import {
   supabase,
@@ -235,6 +236,7 @@ export function App() {
     }
     return window.matchMedia("(max-width: 640px)").matches;
   });
+  const [viewMode, setViewMode] = useState("timeline");
   const [typeFilter, setTypeFilter] = useState("all");
   const [spiderSupportFilter, setSpiderSupportFilter] = useState("all");
   const [heroFilter, setHeroFilter] = useState("All heroes");
@@ -1116,6 +1118,35 @@ export function App() {
     persistProgress(nextProgress, itemId);
   };
 
+  // Set many items at once (used by "Mark all watched" on a series season).
+  const setItemsStatus = (itemIds, status) => {
+    if (!requireSignIn()) {
+      return;
+    }
+    const nextProgress = { ...progress };
+    itemIds.forEach((id) => {
+      nextProgress[id] = status;
+    });
+    persistProgress(nextProgress);
+  };
+
+  const timelineHelpers = useMemo(
+    () => ({
+      normalizeTitle: (item) =>
+        item.type === "film" ? normalizeFilmTitle(item.title) : normalizeShowTitle(item.title),
+      getPosterUrl: (item) => {
+        const title =
+          item.type === "film" ? normalizeFilmTitle(item.title) : normalizeShowTitle(item.title);
+        return posterMap[`${item.type}::${title}`] || getLocalPosterUrl(title);
+      },
+      getDateLabel: (item) => computedScheduleDates[item.id] || item.plannedDate,
+      getReleaseLabel: (item) => getReleaseDateLabel(item),
+      getWatchUrl: (item) => getWatchNowUrl(item.title, item.type),
+      isSpiderSupport: (item) => isSpiderSupportItem(item),
+    }),
+    [posterMap, computedScheduleDates]
+  );
+
   const handleLeaveWatchParty = async () => {
     const personal = await watchParty.leaveParty();
     if (personal) {
@@ -1532,6 +1563,24 @@ export function App() {
 
       <section className="controls">
         <div className="filters">
+          <div className="view-toggle" role="group" aria-label="Choose view">
+            <button
+              type="button"
+              className={viewMode === "timeline" ? "active" : ""}
+              aria-pressed={viewMode === "timeline"}
+              onClick={() => setViewMode("timeline")}
+            >
+              Timeline
+            </button>
+            <button
+              type="button"
+              className={viewMode === "list" ? "active" : ""}
+              aria-pressed={viewMode === "list"}
+              onClick={() => setViewMode("list")}
+            >
+              Classic list
+            </button>
+          </div>
           {FILTERS.map((filter) => (
             <button
               key={filter.id}
@@ -1672,6 +1721,16 @@ export function App() {
         </section>
       ) : null}
 
+      {viewMode === "timeline" ? (
+        <TimelineView
+          arcs={filteredArcs}
+          progress={progress}
+          helpers={timelineHelpers}
+          onCycleItem={updateItemStatus}
+          onBulkSet={setItemsStatus}
+          isSignedIn={isAuthenticatedUser}
+        />
+      ) : (
       <section className="list">
         {filteredArcs.map((arc) => (
           <article key={arc.id} className="arc">
@@ -1800,6 +1859,7 @@ export function App() {
           </article>
         ))}
       </section>
+      )}
       </main>
 
       <button
