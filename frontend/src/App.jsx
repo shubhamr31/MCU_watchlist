@@ -8,6 +8,7 @@ import {
 } from "./utils/collabSession";
 import { WatchPartyPanel } from "./components/WatchPartyPanel";
 import { TimelineView } from "./components/TimelineView";
+import { IntroLoader } from "./components/IntroLoader";
 import { useWatchParty } from "./hooks/useWatchParty";
 import {
   supabase,
@@ -226,6 +227,8 @@ const ADMIN_USERNAME = "LOKI69";
 // Set to false when login should be required again at startup.
 const GUEST_FIRST_HOME = true;
 
+const INTRO_DURATION_MS = 2600;
+
 const seed = buildScheduleSeed();
 
 export function App() {
@@ -369,7 +372,7 @@ export function App() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setShowIntroLoader(false);
-    }, 1800);
+    }, INTRO_DURATION_MS);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -1299,14 +1302,7 @@ export function App() {
 
   if (showIntroLoader) {
     return (
-      <div className="marvel-loader" role="status" aria-live="polite" aria-label="Loading Sacred Timeline">
-        <div className="marvel-loader-frame">
-          <h1 className="marvel-loader-title">Sacred Timeline</h1>
-          <div className="marvel-loader-bar">
-            <span />
-          </div>
-        </div>
-      </div>
+      <IntroLoader durationMs={INTRO_DURATION_MS} onSkip={() => setShowIntroLoader(false)} />
     );
   }
 
@@ -1316,16 +1312,7 @@ export function App() {
 
   if (showAuthScreen) {
     if (authChecking) {
-      return (
-        <div className="app-layout">
-          <main className="container auth-container">
-            <section className="auth-card">
-              <h1>Sacred Timeline</h1>
-              <p>Loading...</p>
-            </section>
-          </main>
-        </div>
-      );
+      return <IntroLoader message="Verifying your clearance" />;
     }
     return (
       <div className="app-layout">

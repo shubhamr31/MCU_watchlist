@@ -14,9 +14,30 @@
       rel="stylesheet"
     />
     <title>Sacred Timeline</title>
+    <style>
+      /* Pre-React splash: matches the in-app intro so there is no blank flash. */
+      body { margin: 0; background: #0a100d; }
+      .boot {
+        position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px;
+        background:
+          radial-gradient(ellipse at 50% 38%, rgba(233, 184, 74, 0.16), transparent 55%),
+          linear-gradient(180deg, #0a100d 0%, #0e1a15 55%, #080c0a 100%);
+        color: #f5d98b;
+        font: 600 14px/1 "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.3em; text-transform: uppercase;
+      }
+      .boot i {
+        display: block; width: 3px; height: 72px; border-radius: 3px;
+        background: linear-gradient(180deg, #f5d98b, #e9b84a);
+        box-shadow: 0 0 12px rgba(233, 184, 74, 0.8);
+        animation: boot-pulse 1.1s ease-in-out infinite alternate;
+      }
+      @keyframes boot-pulse { from { opacity: 0.35; transform: scaleY(0.6); } to { opacity: 1; transform: scaleY(1); } }
+      @media (prefers-reduced-motion: reduce) { .boot i { animation: none; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" role="status" aria-label="Loading Sacred Timeline"><i></i><span>Sacred Timeline</span></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
