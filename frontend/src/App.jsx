@@ -9,6 +9,7 @@ import {
 import { WatchPartyPanel } from "./components/WatchPartyPanel";
 import { TimelineView } from "./components/TimelineView";
 import { IntroLoader } from "./components/IntroLoader";
+import { LoginScreen } from "./components/LoginScreen";
 import { useWatchParty } from "./hooks/useWatchParty";
 import {
   supabase,
@@ -228,6 +229,8 @@ const ADMIN_USERNAME = "LOKI69";
 const GUEST_FIRST_HOME = true;
 
 const INTRO_DURATION_MS = 2600;
+// Shown as a friendly notice (not an error) when a guest tries to save progress.
+const SIGN_IN_PROMPT = "Sign in to track your progress.";
 
 const seed = buildScheduleSeed();
 
@@ -1107,7 +1110,7 @@ export function App() {
       return true;
     }
     setAuthMode("login");
-    setAuthError("Sign in to track your progress.");
+    setAuthError(SIGN_IN_PROMPT);
     setShowLoginScreen(true);
     return false;
   };
@@ -1315,107 +1318,41 @@ export function App() {
       return <IntroLoader message="Verifying your clearance" />;
     }
     return (
-      <div className="app-layout">
-        <main className="container auth-container">
-          <section className="auth-card">
-            {GUEST_FIRST_HOME ? (
-              <button
-                type="button"
-                className="auth-switch"
-                onClick={() => {
-                  setShowLoginScreen(false);
-                  setAuthError("");
-                  setMagicLinkInfo("");
-                }}
-              >
-                ← Back to watchlist (guest session)
-              </button>
-            ) : null}
-            <h1>Sacred Timeline</h1>
-            <p>Sign in with a 6-character username and 6-digit PassKey.</p>
-            <form onSubmit={submitCredentialsAuth} className="auth-credentials-form">
-              <label htmlFor="auth-username">
-                Username (6 alphanumeric)
-                <input
-                  id="auth-username"
-                  type="text"
-                  autoComplete="username"
-                  maxLength={6}
-                  value={authUsername}
-                  onChange={(e) => setAuthUsername(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                  placeholder="A1B2C3"
-                />
-              </label>
-              <label htmlFor="auth-passkey">
-                PassKey (6 digits)
-                <input
-                  id="auth-passkey"
-                  type="password"
-                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={authPassKey}
-                  onChange={(e) => setAuthPassKey(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="••••••"
-                />
-              </label>
-              <button type="submit" disabled={authSubmitting}>
-                {authSubmitting ? "Signing in..." : authMode === "register" ? "Create account" : "Sign in"}
-              </button>
-            </form>
-            <button
-              type="button"
-              className="auth-switch"
-              onClick={() => {
-                setAuthMode((prev) => (prev === "register" ? "login" : "register"));
+      <LoginScreen
+        mode={authMode}
+        onModeChange={(nextMode) => {
+          setAuthMode(nextMode);
+          setAuthError("");
+        }}
+        username={authUsername}
+        onUsernameChange={setAuthUsername}
+        passKey={authPassKey}
+        onPassKeyChange={setAuthPassKey}
+        onSubmit={submitCredentialsAuth}
+        submitting={authSubmitting}
+        error={authError === SIGN_IN_PROMPT ? "" : authError}
+        notice={authError === SIGN_IN_PROMPT ? SIGN_IN_PROMPT : ""}
+        showMagicLink={isSupabaseConfigured}
+        magicLinkEmail={magicLinkEmail}
+        onMagicLinkEmailChange={setMagicLinkEmail}
+        onMagicLinkSubmit={sendMagicLink}
+        magicLinkSending={magicLinkSending}
+        magicLinkInfo={magicLinkInfo}
+        showGoogle={Boolean(GOOGLE_CLIENT_ID)}
+        googleReady={googleReady}
+        onGoogle={triggerGoogleLogin}
+        onGuest={
+          GUEST_FIRST_HOME
+            ? () => {
+                setShowLoginScreen(false);
                 setAuthError("");
-              }}
-            >
-              {authMode === "register" ? "Already have an account? Sign in" : "Need an account? Create one"}
-            </button>
-            <p className="auth-divider">or</p>
-            {isSupabaseConfigured ? (
-              <form onSubmit={sendMagicLink} className="auth-magic-form">
-                <label htmlFor="magic-link-email-auth">
-                  Email (magic link)
-                  <input
-                    id="magic-link-email-auth"
-                    type="email"
-                    autoComplete="email"
-                    value={magicLinkEmail}
-                    onChange={(e) => setMagicLinkEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </label>
-                <button type="submit" disabled={magicLinkSending}>
-                  {magicLinkSending ? "Sending link…" : "Email me a magic link"}
-                </button>
-              </form>
-            ) : null}
-            {magicLinkInfo ? <p className="auth-success">{magicLinkInfo}</p> : null}
-            {authError ? <p className="auth-error">{authError}</p> : null}
-            {GOOGLE_CLIENT_ID ? (
-              <>
-                <button type="button" onClick={triggerGoogleLogin} disabled={!googleReady}>
-                  {googleReady ? "Continue with Google" : "Loading Google Sign-In…"}
-                </button>
-              </>
-            ) : null}
-          </section>
-          <section className="leaderboard auth-leaderboard">
-            <h3>Leaderboard</h3>
-            <div className="leaderboard-list">
-              {leaderboard.slice(0, 8).map((entry, index) => (
-                <article key={entry.username} className="leaderboard-item">
-                  <span>#{index + 1}</span>
-                  <strong>{entry.username}</strong>
-                  <span>{entry.completed} completed</span>
-                </article>
-              ))}
-            </div>
-          </section>
-        </main>
-      </div>
+                setMagicLinkInfo("");
+                setAuthPassKey("");
+              }
+            : null
+        }
+        leaderboard={leaderboard}
+      />
     );
   }
 
