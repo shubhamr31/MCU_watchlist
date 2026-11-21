@@ -563,7 +563,9 @@ export function App() {
   }, [API_BASE_URL, authHeaders, isAdmin]);
 
   useEffect(() => {
-    if (currentUser || typeof window === "undefined") {
+    // Guests are represented as currentUser === "Guest" (guest-first mode), so gate on a
+    // real session instead; otherwise Google's script never loads for guests who open Sign in.
+    if (authToken || supabaseUser || typeof window === "undefined") {
       return undefined;
     }
     if (!GOOGLE_CLIENT_ID) {
@@ -613,7 +615,12 @@ export function App() {
     };
 
     if (existingScript) {
-      initGoogle();
+      if (window.google?.accounts?.id) {
+        initGoogle();
+      } else {
+        // Script tag exists but Google's library has not finished loading yet.
+        existingScript.addEventListener("load", initGoogle, { once: true });
+      }
       return undefined;
     }
     const script = document.createElement("script");
@@ -625,7 +632,7 @@ export function App() {
     script.onerror = () => setAuthError("Unable to load Google Sign-In.");
     document.head.appendChild(script);
     return undefined;
-  }, [currentUser, supabaseUser]);
+  }, [authToken, supabaseUser]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
