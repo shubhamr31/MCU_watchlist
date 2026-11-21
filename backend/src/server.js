@@ -279,10 +279,21 @@ const createSession = async (userId) => {
   return token;
 };
 
+// Sessions are valid while now - last_seen_at <= SESSION_IDLE_MS (sliding window: every
+// authenticated use renews it). Several sessions per account may exist at once.
+const parsedIdleDays = Number(process.env.SESSION_IDLE_DAYS);
+const SESSION_IDLE_DAYS = Number.isFinite(parsedIdleDays) && parsedIdleDays > 0 ? parsedIdleDays : 3;
+const SESSION_IDLE_MS = SESSION_IDLE_DAYS * 24 * 60 * 60 * 1000;
+// last_seen_at is only rewritten when older than this, to avoid a DB write on every request.
+const SESSION_TOUCH_INTERVAL_MS = 10 * 60 * 1000;
+const SESSION_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+const sessionIdleCutoffIso = () => new Date(Date.now() - SESSION_IDLE_MS).toISOString();
+
 const readSessionUser = async (token) => {
   const { data, error } = await supabase
     .from("custom_sessions")
-    .select("token,user_id,custom_users(id,username,provider)")
+    .select("token,user_id,last_seen_at,custom_users(id,username,provider)")
     .eq("token", token)
     .maybeSingle();
   if (error) {
@@ -291,10 +302,26 @@ const readSessionUser = async (token) => {
   if (!data?.custom_users) {
     return null;
   }
+  const idleMs = Date.now() - Date.parse(data.last_seen_at);
+  if (Number.isFinite(idleMs) && idleMs > SESSION_IDLE_MS) {
+    try {
+      // Lazily drop this one expired row (re-checking last_seen_at so a session that was
+      // just renewed by a concurrent request is never removed).
+      await supabase
+        .from("custom_sessions")
+        .delete()
+        .eq("token", token)
+        .lt("last_seen_at", sessionIdleCutoffIso());
+    } catch (_deleteError) {
+      // Non-fatal: the session is still rejected below.
+    }
+    return null;
+  }
   return {
     token: data.token,
     userId: data.user_id,
     user: data.custom_users,
+    needsTouch: !Number.isFinite(idleMs) || idleMs > SESSION_TOUCH_INTERVAL_MS,
   };
 };
 
@@ -303,6 +330,15 @@ const touchSession = async (token) => {
     .from("custom_sessions")
     .update({ last_seen_at: new Date().toISOString() })
     .eq("token", token);
+};
+
+// Removes only expired rows from custom_sessions. Users, progress and collab data are never touched.
+const cleanupExpiredSessions = async () => {
+  try {
+    await supabase.from("custom_sessions").delete().lt("last_seen_at", sessionIdleCutoffIso());
+  } catch (_error) {
+    // Best effort: expired sessions are also rejected and removed lazily on use.
+  }
 };
 
 app.use(cors());
@@ -510,7 +546,9 @@ const requireAuth = async (req, res, next) => {
     if (!session) {
       return res.status(401).json({ error: "Unauthorized." });
     }
-    touchSession(token);
+    if (session.needsTouch) {
+      touchSession(token).catch(() => {});
+    }
     req.auth = {
       token,
       userId: session.userId,
@@ -532,6 +570,24 @@ const requireAdmin = (req, res, next) => {
 
 app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ username: req.auth.username, isAdmin: isAdminUsername(req.auth.username) });
+});
+
+// Server-side logout: removes only this one session (by token). Idempotent: an unknown or
+// already-expired token is a harmless no-op. Progress and other sessions are untouched.
+app.post("/api/auth/logout", async (req, res) => {
+  try {
+    const token = parseBearerToken(req.headers.authorization);
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized." });
+    }
+    const { error } = await supabase.from("custom_sessions").delete().eq("token", token);
+    if (error) {
+      throw error;
+    }
+    return res.json({ ok: true });
+  } catch (_error) {
+    return res.status(500).json({ error: "Could not sign out right now." });
+  }
 });
 
 app.get("/api/progress/me", requireAuth, async (req, res) => {
@@ -629,7 +685,22 @@ app.put("/api/auth/credentials", authLimiter, requireAuth, async (req, res) => {
     if (updateError) {
       throw updateError;
     }
-    return res.json({ ok: true, username: updatedUser.username });
+    // A real PassKey change signs out every other device; the device making the change stays
+    // signed in. A username-only change (or re-entering the same PassKey) revokes nothing.
+    let otherSessionsRevoked = false;
+    if (hasNewPassKey && newPassKeyInput !== currentPassKey) {
+      try {
+        const { error: revokeError } = await supabase
+          .from("custom_sessions")
+          .delete()
+          .eq("user_id", user.id)
+          .neq("token", req.auth.token);
+        otherSessionsRevoked = !revokeError;
+      } catch (_revokeError) {
+        otherSessionsRevoked = false;
+      }
+    }
+    return res.json({ ok: true, username: updatedUser.username, otherSessionsRevoked });
   } catch (_error) {
     return res.status(500).json({ error: "Could not update credentials right now." });
   }
@@ -1032,6 +1103,9 @@ app.get("/api/poster", async (req, res) => {
 
 try {
   ensureSupabaseConfigured();
+  // Also run once at startup: hosts that spin down when idle may never reach the interval.
+  cleanupExpiredSessions();
+  setInterval(cleanupExpiredSessions, SESSION_CLEANUP_INTERVAL_MS).unref();
   app.listen(PORT, () => {
     console.log(`MCU backend listening on http://localhost:${PORT}`);
   });

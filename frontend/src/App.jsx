@@ -1036,6 +1036,14 @@ export function App() {
   };
 
   const logout = async () => {
+    if (authToken) {
+      // Best effort: end this session on the server too. Never blocks or fails the local logout.
+      fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` },
+        keepalive: true,
+      }).catch(() => {});
+    }
     if (supabase) {
       await supabase.auth.signOut();
     }
@@ -1103,7 +1111,11 @@ export function App() {
       setCurrentPassKeyInput("");
       setNewUsernameInput("");
       setNewPassKeyInput("");
-      setAccountSettingsMessage("Credentials updated successfully.");
+      setAccountSettingsMessage(
+        payload.otherSessionsRevoked
+          ? "Credentials updated successfully. Other devices were signed out."
+          : "Credentials updated successfully."
+      );
     } catch (_error) {
       setAccountSettingsError("Could not reach server while updating credentials.");
     } finally {

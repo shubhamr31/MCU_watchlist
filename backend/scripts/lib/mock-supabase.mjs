@@ -8,15 +8,39 @@ import { randomUUID } from "node:crypto";
 
 export const createMockTables = () => ({ custom_users: [], custom_sessions: [], custom_progress: [] });
 
+const OPERATORS = ["eq", "neq", "lt", "lte", "gt", "gte"];
+
+// Unsupported operators fail loudly: silently ignoring one would make a filtered
+// DELETE/PATCH hit every row.
 const parseFilters = (params) => {
   const filters = [];
   params.forEach((value, key) => {
     if (["select", "order", "limit", "on_conflict"].includes(key)) return;
-    if (value.startsWith("eq.")) filters.push([key, value.slice(3)]);
+    const op = value.slice(0, value.indexOf("."));
+    if (!OPERATORS.includes(op)) throw new Error(`mock: unsupported filter ${key}=${value}`);
+    filters.push([key, op, value.slice(op.length + 1)]);
   });
   return filters;
 };
-const matches = (row, filters) => filters.every(([k, v]) => String(row[k]) === v);
+
+// Compares as timestamps when both sides parse as dates (e.g. last_seen_at), otherwise as strings.
+const compare = (actual, expected) => {
+  const a = Date.parse(actual);
+  const b = Date.parse(expected);
+  if (Number.isFinite(a) && Number.isFinite(b)) return a - b;
+  return String(actual) < String(expected) ? -1 : String(actual) > String(expected) ? 1 : 0;
+};
+const matches = (row, filters) =>
+  filters.every(([k, op, v]) => {
+    if (op === "eq") return String(row[k]) === v;
+    if (op === "neq") return String(row[k]) !== v;
+    if (row[k] === null || row[k] === undefined) return false;
+    const diff = compare(row[k], v);
+    if (op === "lt") return diff < 0;
+    if (op === "lte") return diff <= 0;
+    if (op === "gt") return diff > 0;
+    return diff >= 0;
+  });
 
 export const startMockSupabase = async (port, tables = createMockTables()) => {
   const withEmbeds = (table, row) => {
@@ -39,7 +63,12 @@ export const startMockSupabase = async (port, tables = createMockTables()) => {
         res.end(payload === undefined ? "" : JSON.stringify(payload));
       };
       if (!rows) return send(404, { message: "no such table" });
-      const filters = parseFilters(url.searchParams);
+      let filters;
+      try {
+        filters = parseFilters(url.searchParams);
+      } catch (error) {
+        return send(400, { message: error.message });
+      }
       const wantsObject = String(req.headers.accept || "").includes("pgrst.object");
       const prefer = String(req.headers.prefer || "");
       if (req.method === "GET") {
@@ -65,8 +94,11 @@ export const startMockSupabase = async (port, tables = createMockTables()) => {
       }
       if (req.method === "PATCH") {
         const patch = JSON.parse(body || "{}");
-        rows.filter((r) => matches(r, filters)).forEach((r) => Object.assign(r, patch));
-        return send(204);
+        const updated = rows.filter((r) => matches(r, filters));
+        updated.forEach((r) => Object.assign(r, patch));
+        if (!prefer.includes("return=representation")) return send(204);
+        if (wantsObject) return updated.length ? send(200, updated[0]) : send(406, { message: "no rows" });
+        return send(200, updated);
       }
       if (req.method === "DELETE") {
         for (let i = rows.length - 1; i >= 0; i -= 1) if (matches(rows[i], filters)) rows.splice(i, 1);
